@@ -1,5 +1,5 @@
 {
   "appHost": {
-    "path": "ShowRoom.AppHost/ShowRoom.AppHost.csproj"
+    "path": "src/aspire/ShowRoom.AppHost/ShowRoom.AppHost.csproj"
   }
 }

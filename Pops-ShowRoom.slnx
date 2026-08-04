@@ -1,0 +1,21 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/Apis/">
+    <Project Path="src/backends/ShowRoom.Business.Api/ShowRoom.Business.Api.csproj" />
+  </Folder>
+  <Folder Name="/src/Aspire/">
+    <Project Path="src/aspire/ShowRoom.AppHost/ShowRoom.AppHost.csproj" />
+    <Project Path="src/aspire/ShowRoom.ServiceDefaults/ShowRoom.ServiceDefaults.csproj" />
+  </Folder>
+  <Folder Name="/src/BuildingBlocks/">
+    <Project Path="src/buildingblocks/ShowRoom.BuildingBlocks/ShowRoom.BuildingBlocks.csproj" Id="7c5bdd51-2dc5-480a-80e6-6cdb3e6b6026" />
+  </Folder>
+  <Folder Name="/src/Modules/" />
+  <Folder Name="/src/Modules/Customer/" />
+  <Folder Name="/src/Modules/Product/">
+    <Project Path="src/modules/ShowRoom.Modules.Product/ShowRoom.Modules.Product.csproj" Id="3fb15f69-31e3-4e50-a820-5a04272966ec" />
+  </Folder>
+  <Folder Name="/src/SharedKernel/" />
+  <Folder Name="/src/Websites/" />
+  <Folder Name="/tests/" />
+</Solution>
