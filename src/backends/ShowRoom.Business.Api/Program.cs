@@ -7,6 +7,7 @@ using Serilog.Sinks.SystemConsole.Themes;
 using ShowRoom.BuildingBlocks;
 using ShowRoom.Business.Api.Modules;
 using ShowRoom.Modules.Customer;
+using ShowRoom.Modules.Order;
 using System.Diagnostics.CodeAnalysis;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -36,11 +37,13 @@ builder.Services.AddApiVersioning(options =>
 // Modules registration (modulith composition root). Services are always registered;
 // the feature flag gates routing and middleware.
 builder.AddCustomerModule(ModulesRegistry.Customer);
+builder.AddOrderModule(ModulesRegistry.Order);
 
-// Enregistre la source OTel du module Acquisition dans le pipeline tracing
+// Enregistre les sources OTel des modules dans le pipeline tracing
 builder.Services.AddOpenTelemetry()
     .WithTracing(tracing => tracing
-        .AddSource(CustomerModule.TelemetrySourceName));
+        .AddSource(CustomerModule.TelemetrySourceName)
+        .AddSource(OrderModule.TelemetrySourceName));
 
 var app = builder.Build();
 
@@ -51,9 +54,6 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
     app.MapScalarApiReference();
-
-    // Apply migrations and seed demo data for local development.
-    await app.Services.InitializeCustomerModuleAsync();
 }
 else
 {
@@ -66,6 +66,7 @@ app.UseHttpsRedirection();
 
 // Module middleware, gated by the module feature flag.
 app.RegisterCustomerModule(ModulesRegistry.Customer);
+app.RegisterOrderModule(ModulesRegistry.Order);
 
 var versionSet = app.NewApiVersionSet()
     .HasApiVersion(new ApiVersion(1))
@@ -87,8 +88,9 @@ var versionedApi = api.MapGroup("/v{version:apiVersion}")
     .WithApiVersionSet(versionSet);
 
 // Modules endpoints (mapped under /api/v{version}). Routes are always mapped so DI/routing stay
-// consistent; the feature flag gates module middleware via RegisterCustomerModule.
+// consistent; the feature flag gates module middleware via RegisterXModule.
 versionedApi.MapCustomerModule();
+versionedApi.MapOrderModule();
 
 app.Run();
 

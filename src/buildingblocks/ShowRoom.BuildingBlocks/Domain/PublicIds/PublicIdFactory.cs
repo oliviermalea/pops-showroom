@@ -8,6 +8,7 @@ public static class PublicIdPrefixes
     public const string InformationRequest = "inf";
     public const string ContentNode = "con";
     public const string Customer = "cus";
+    public const string Order = "ord";
 }
 
 public static class PublicIdFactory
@@ -23,4 +24,7 @@ public static class PublicIdFactory
 
     public static Result<PublicId> ForCustomer()
         => PublicId.Create(PublicIdPrefixes.Customer);
+
+    public static Result<PublicId> ForOrder()
+        => PublicId.Create(PublicIdPrefixes.Order);
 }

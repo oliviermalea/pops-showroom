@@ -14,6 +14,9 @@
   <Folder Name="/src/Modules/Customer/">
     <Project Path="src/modules/ShowRoom.Modules.Customer/ShowRoom.Modules.Customer.csproj" />
   </Folder>
+  <Folder Name="/src/Modules/Order/">
+    <Project Path="src/modules/ShowRoom.Modules.Order/ShowRoom.Modules.Order.csproj" />
+  </Folder>
   <Folder Name="/src/Modules/Product/">
     <Project Path="src/modules/ShowRoom.Modules.Product/ShowRoom.Modules.Product.csproj" Id="3fb15f69-31e3-4e50-a820-5a04272966ec" />
   </Folder>
@@ -25,6 +28,8 @@
     <Project Path="tests/ShowRoom.Testing/ShowRoom.Testing.csproj" />
     <Project Path="tests/ShowRoom.Modules.Customer.Tests/ShowRoom.Modules.Customer.Tests.csproj" />
     <Project Path="tests/ShowRoom.Modules.Customer.IntegrationTests/ShowRoom.Modules.Customer.IntegrationTests.csproj" />
+    <Project Path="tests/ShowRoom.Modules.Order.Tests/ShowRoom.Modules.Order.Tests.csproj" />
+    <Project Path="tests/ShowRoom.Modules.Order.IntegrationTests/ShowRoom.Modules.Order.IntegrationTests.csproj" />
     <Project Path="tests/ShowRoom.Architecture.Tests/ShowRoom.Architecture.Tests.csproj" />
   </Folder>
 </Solution>
