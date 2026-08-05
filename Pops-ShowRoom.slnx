@@ -30,6 +30,8 @@
     <Project Path="tests/ShowRoom.Modules.Customer.IntegrationTests/ShowRoom.Modules.Customer.IntegrationTests.csproj" />
     <Project Path="tests/ShowRoom.Modules.Order.Tests/ShowRoom.Modules.Order.Tests.csproj" />
     <Project Path="tests/ShowRoom.Modules.Order.IntegrationTests/ShowRoom.Modules.Order.IntegrationTests.csproj" />
+    <Project Path="tests/ShowRoom.Modules.Product.Tests/ShowRoom.Modules.Product.Tests.csproj" />
+    <Project Path="tests/ShowRoom.Modules.Product.IntegrationTests/ShowRoom.Modules.Product.IntegrationTests.csproj" />
     <Project Path="tests/ShowRoom.Architecture.Tests/ShowRoom.Architecture.Tests.csproj" />
   </Folder>
 </Solution>

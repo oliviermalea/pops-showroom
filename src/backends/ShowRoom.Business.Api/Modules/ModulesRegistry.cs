@@ -1,5 +1,6 @@
 using ShowRoom.Modules.Customer;
 using ShowRoom.Modules.Order;
+using ShowRoom.Modules.Product;
 
 namespace ShowRoom.Business.Api.Modules;
 
@@ -10,6 +11,7 @@ internal record class ModulesRegistry(string Value)
 {
     internal static readonly ModulesRegistry Customer = new(CustomerConventions.ModuleName);
     internal static readonly ModulesRegistry Order = new(OrderConventions.ModuleName);
+    internal static readonly ModulesRegistry Product = new(ProductConventions.ModuleName);
 
     public static implicit operator string(ModulesRegistry module) => module.Value;
 }

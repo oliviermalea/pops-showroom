@@ -1,0 +1,104 @@
+using ShowRoom.BuildingBlocks.Domain.Abstractions;
+using ShowRoom.BuildingBlocks.Domain.Primitives;
+using ShowRoom.BuildingBlocks.Domain.PublicIds;
+using ShowRoom.BuildingBlocks.Results;
+
+namespace ShowRoom.Modules.Product.Domain;
+
+/// <summary>
+/// Product aggregate root. Carries a strongly-typed internal <see cref="ProductId"/> and the
+/// externally exposed <see cref="AggregateRootWithPublicId{TId}.PublicId"/>; primitive identifiers
+/// are never used in the domain. Referenced by other modules (e.g. Order) by <see cref="PublicId"/>
+/// value only.
+/// </summary>
+public sealed class Product : AggregateRootWithPublicId<ProductId>, IAuditable
+{
+    public const string DefaultCurrency = "EUR";
+
+    private Product(ProductId id)
+        : base() => Id = id;
+
+    private Product(
+        ProductId id,
+        PublicId publicId,
+        string name,
+        string? description,
+        decimal price,
+        string currency,
+        ProductStatus status,
+        DateTimeOffset createdAt,
+        DateTimeOffset? updatedAt)
+        : this(id)
+    {
+        PublicId = publicId;
+        Name = name;
+        Description = description;
+        Price = price;
+        Currency = currency;
+        Status = status;
+        CreatedAt = createdAt;
+        UpdatedAt = updatedAt;
+    }
+
+    public ProductId Id { get; private set; }
+
+    public string Name { get; private set; } = string.Empty;
+
+    public string? Description { get; private set; }
+
+    public decimal Price { get; private set; }
+
+    public string Currency { get; private set; } = DefaultCurrency;
+
+    public ProductStatus Status { get; private set; } = ProductStatus.Available;
+
+    public DateTimeOffset CreatedAt { get; private set; }
+
+    public DateTimeOffset? UpdatedAt { get; private set; }
+
+    /// <summary>
+    /// Creates a brand new available product. Validates its input and returns an error result rather
+    /// than throwing when the input is invalid.
+    /// </summary>
+    public static Result<Product> Create(
+        string name,
+        string? description,
+        decimal price,
+        string? currency,
+        DateTimeOffset createdAt)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return ProductErrors.NameRequired;
+        }
+
+        if (price < 0)
+        {
+            return ProductErrors.InvalidPrice;
+        }
+
+        return Result<Product>.Success(new Product(
+            ProductId.FromGuid(Guid.CreateVersion7()),
+            PublicIdFactory.ForProduct().Value,
+            name.Trim(),
+            string.IsNullOrWhiteSpace(description) ? null : description.Trim(),
+            price,
+            string.IsNullOrWhiteSpace(currency) ? DefaultCurrency : currency.Trim().ToUpperInvariant(),
+            ProductStatus.Available,
+            createdAt,
+            updatedAt: null));
+    }
+
+    /// <summary>Rehydrates an aggregate from already-persisted state (used by EF).</summary>
+    public static Product Restore(
+        ProductId id,
+        PublicId publicId,
+        string name,
+        string? description,
+        decimal price,
+        string currency,
+        ProductStatus status,
+        DateTimeOffset createdAt,
+        DateTimeOffset? updatedAt)
+        => new(id, publicId, name, description, price, currency, status, createdAt, updatedAt);
+}

@@ -8,6 +8,7 @@ using ShowRoom.BuildingBlocks;
 using ShowRoom.Business.Api.Modules;
 using ShowRoom.Modules.Customer;
 using ShowRoom.Modules.Order;
+using ShowRoom.Modules.Product;
 using System.Diagnostics.CodeAnalysis;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -38,12 +39,14 @@ builder.Services.AddApiVersioning(options =>
 // the feature flag gates routing and middleware.
 builder.AddCustomerModule(ModulesRegistry.Customer);
 builder.AddOrderModule(ModulesRegistry.Order);
+builder.AddProductModule(ModulesRegistry.Product);
 
 // Enregistre les sources OTel des modules dans le pipeline tracing
 builder.Services.AddOpenTelemetry()
     .WithTracing(tracing => tracing
         .AddSource(CustomerModule.TelemetrySourceName)
-        .AddSource(OrderModule.TelemetrySourceName));
+        .AddSource(OrderModule.TelemetrySourceName)
+        .AddSource(ProductModule.TelemetrySourceName));
 
 var app = builder.Build();
 
@@ -67,6 +70,7 @@ app.UseHttpsRedirection();
 // Module middleware, gated by the module feature flag.
 app.RegisterCustomerModule(ModulesRegistry.Customer);
 app.RegisterOrderModule(ModulesRegistry.Order);
+app.RegisterProductModule(ModulesRegistry.Product);
 
 var versionSet = app.NewApiVersionSet()
     .HasApiVersion(new ApiVersion(1))
@@ -91,6 +95,7 @@ var versionedApi = api.MapGroup("/v{version:apiVersion}")
 // consistent; the feature flag gates module middleware via RegisterXModule.
 versionedApi.MapCustomerModule();
 versionedApi.MapOrderModule();
+versionedApi.MapProductModule();
 
 app.Run();
 

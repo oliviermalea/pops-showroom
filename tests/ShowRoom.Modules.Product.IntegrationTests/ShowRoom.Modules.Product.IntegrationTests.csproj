@@ -9,17 +9,27 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<None Update="appsettings.IntegrationTests.json">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+	</ItemGroup>
+
+	<ItemGroup>
 		<PackageReference Include="Microsoft.NET.Test.Sdk" />
 		<PackageReference Include="xunit.v3" />
 		<PackageReference Include="xunit.runner.visualstudio" />
-		<PackageReference Include="TngTech.ArchUnitNET.xUnitV3" />
+		<PackageReference Include="AwesomeAssertions" />
+		<PackageReference Include="Bogus" />
 		<PackageReference Include="coverlet.collector" />
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\..\src\modules\ShowRoom.Modules.Customer\ShowRoom.Modules.Customer.csproj" />
-		<ProjectReference Include="..\..\src\modules\ShowRoom.Modules.Order\ShowRoom.Modules.Order.csproj" />
 		<ProjectReference Include="..\..\src\modules\ShowRoom.Modules.Product\ShowRoom.Modules.Product.csproj" />
+		<ProjectReference Include="..\ShowRoom.Testing\ShowRoom.Testing.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Using Include="Xunit" />
 	</ItemGroup>
 
 </Project>
