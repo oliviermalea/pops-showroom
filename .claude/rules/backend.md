@@ -1,7 +1,7 @@
 # Rules — ShowRoom Backend (v1)
 
 ## QUICK HARD RULES (backend, must always pass)
-- Modulith boundaries are mandatory: `Features -> Domain`, `Domain -> Persistence`; all other directions are forbidden.
+- Modulith boundaries are mandatory: `Features -> Domain`, `Features -> Persistence`, `Persistence -> Domain` (Domain is pure); reverse directions are forbidden. No repository pattern — feature handlers use the module DbContext directly.
 - Minimal APIs only. MVC Controllers/attributes are forbidden.
 - MediatR is forbidden. AutoMapper is forbidden. Use Scrutor for DI.
 - Each feature must use VSA + REPR:
@@ -16,6 +16,7 @@
 - Primary identifiers in domain entities and aggregates must always be implemented as StronglyTypedId value types; primitive `Guid`/`string` identifiers are forbidden in the domain model.
 - Public-facing URLs and resource identifiers returned by APIs must use `PublicId`; technical IDs stay internal unless a contract explicitly requires them.
 - Status-like concepts with low cardinality must never remain primitive strings/ints in the domain model; implement them as a ValueObject or `Ardalis.SmartEnum`, and prefer a ValueObject when only a very small closed set of values exists.
+- Prefer `Result`/`Error` over exceptions for expected, handleable outcomes (validation, not-found, conflict, domain-rule violations). Domain value-object and aggregate factories that validate input must return `Result<T>` and never throw for invalid input. Reserve exceptions for truly exceptional cases (invariant guards, corrupt persisted data, unrecoverable states).
 - Tests are mandatory: AAA (`sut` naming), assembler tests, architecture tests green.
 
 ---
@@ -42,10 +43,13 @@ Each business domain is an isolated module (e.g., Catalog, Ordering, Payments), 
 
 ### 1.3 Allowed dependencies
 - `Features -> Domain` ✅
-- `Domain -> Persistence` ✅
-- `Features -> Persistence` ❌
+- `Features -> Persistence` ✅
+- `Persistence -> Domain` ✅
+- `Domain -> Persistence` ❌
 - `Domain -> Features` ❌
-- `Persistence -> Domain|Features` ❌
+- `Persistence -> Features` ❌
+
+The `Domain` layer is pure: it depends on nothing in `Persistence`/`Features`. `Persistence` references `Domain` to map the aggregate directly via EF Core `IEntityTypeConfiguration<TAggregate>` (no POCO). **There is NO repository abstraction** (no `I<X>Repository`): feature command/query handlers depend on the module `DbContext` directly (vertical slice), and the `DbContext` is the unit of work (`Add`/`AnyAsync`/`SaveChangesAsync`/`FirstOrDefaultAsync`). This is why `Features -> Persistence` is allowed.
 
 ### 1.5 Module namespace conventions
 Each module must organize its types according to the following namespace pattern:
@@ -64,6 +68,88 @@ MVC is structurally forbidden in this backend:
 
 All HTTP surfaces must use **Minimal APIs** (`app.MapGet/MapPost/…`).  
 This rule applies to every module, including new ones.
+
+---
+
+#### 1.6.1 Dual-ID pattern: StronglyTypedId (technical) + PublicId (public)
+**Every aggregate exposed via HTTP API must have both a technical `StronglyTypedId` and a `PublicId`.**
+
+**Technical ID (`StronglyTypedId`):**
+- Used internally within the domain and persistence layers only
+- Each entity has its own dedicated `StronglyTypedId` (e.g., `InformationRequestId`, `ContentNodeId`)
+- Example: `public InformationRequestId Id { get; private set; }`
+- Never exposed in HTTP responses or API contracts
+
+**Public ID (`PublicId`):**
+- A shared `record` type with semantic prefix + guid structure (e.g., `inf_abc123def456...`)
+- Used exclusively in HTTP API responses and external contracts
+- Set by the domain when the aggregate is created
+- Example: `public PublicId PublicId { get; private set; }`
+
+**Complete example pattern:**
+```csharp
+public class InformationRequest
+{
+    public InformationRequestId Id { get; private set; }          // Technical ID (internal only)
+    public PublicId PublicId { get; private set; }                // Public ID (exposed in APIs)
+
+    public static InformationRequest Create(/* ... */)
+    {
+        var id = InformationRequestId.New();
+        var publicId = PublicId.Create("inf").Value;  // Generate public ID with prefix
+        return new InformationRequest { Id = id, PublicId = publicId };
+    }
+}
+```
+
+**API/DTO rules:**
+- Response DTOs must return `PublicId`, never the technical `Id`
+- Assemblers map between technical ID (internal) ↔ PublicId (external)
+- Clients identify resources exclusively by `PublicId`
+
+**Rationale:** Decouples internal domain architecture from public API contracts; enables ID rotation/security hardening without breaking client contracts; provides semantic context via prefixes.
+
+Implementation notes for this repo:
+- Technical ids use **Meziantou.Framework.StronglyTypedId** and live in the module's `Domain`. Write ONLY the declaration — Meziantou generates the constructor, `Value`, `FromGuid`, `Parse`/`TryParse`, equality, comparison and the System.Text.Json converter. Do not hand-write any members:
+  ```csharp
+  [StronglyTypedId(typeof(Guid))]
+  public partial struct CustomerId : IComparable { }   // ": IComparable" makes it generate IComparable<T> + operators
+  ```
+  Create a fresh id with the generated factory: `CustomerId.FromGuid(Guid.CreateVersion7())` (the conceptual example above shows `Id.New()`; there is no hand-written `New()` — use `FromGuid`).
+- `PublicId`, `PublicIdFactory`, `PublicIdErrors` live in `ShowRoom.BuildingBlocks.Domain.PublicIds`. The domain sets the `PublicId` in the aggregate's factory via `PublicIdFactory.For<Aggregate>()` (or `PublicId.Create("<prefix>")`), taking `.Value` from the returned `Result<PublicId>`.
+- Persistence maps the domain aggregate directly (no POCO): EF `IEntityTypeConfiguration<TAggregate>` with value converters for the technical id, `PublicId` (`HasConversion(p => p.Value, s => PublicId.Parse(s))`), and value objects.
+
+---
+
+### 1.7 Module composition (mandatory)
+Each module is composed through a fixed set of root-level types (namespace `ShowRoom.Modules.<Module>`, NOT a layer), modelled on the Acquisition module:
+- **`<Module>Conventions`** — constants only: `ModuleName`, `Tag`, `RouteSegment`, `BaseRoute` (`"/" + RouteSegment`), `ConnectionName`, and `BuildApiBasePath(ApiVersion?)`.
+- **`<Module>Module`** — composition root exposing:
+  - `Add<Module>Module(IHostApplicationBuilder, string module)` → delegates to `AddInfrastructureModule()` + `AddApplicationModule()`. Services are ALWAYS registered so DI and routes stay consistent; the feature flag gates routing/middleware only.
+  - `Register<Module>Module(WebApplication, string module)` → gates on `IsModuleEnabled(module)`, then `Use<Module>Module()` (module middleware).
+  - `Map<Module>Module(IEndpointRouteBuilder)` → creates a route group `MapGroup(BaseRoute).WithTags(Tag)` and maps each feature endpoint on the group; feature endpoints map only their sub-path (e.g. `/{publicId}`).
+  - `TelemetrySourceName` constant.
+- **`ApplicationModule`** — `AddApplicationModule()` → `AddApplicationHandlersFromAssembly(assembly)`.
+- **`InfrastructureModule`** — `AddInfrastructureModule()` (DbContext, `IDateTimeProvider`, `AddValidators()`) + `UseInfrastructure()`.
+- **`ValidatorInstaller`** — `AddValidators()` → `AddValidatorsFromAssembly(includeInternalTypes: true)`.
+
+Feature-flag gating: module enablement is read from `FeatureManagement:<ModuleName>` via `IsModuleEnabled` (BuildingBlocks). The host keeps a `ModulesRegistry` (record with `implicit operator string`) and wires `Add<Module>Module` (always — services/routes stay consistent) and `Map<Module>Module` (always). Only `Register<Module>Module` (module middleware) is gated by `IsModuleEnabled`. Do NOT gate `Map` on `builder.Configuration` before `Build()` — under `WebApplicationFactory` the flag is not reliably present at that point, which breaks endpoint tests.
+
+Handlers: implement `ShowRoom.BuildingBlocks.Application.IQueryHandler<TQuery, TResponse>` (`HandleAsync`) or `ICommandHandler<TCommand, TResponse>` (`Handle`), where `TResponse` is the `Result<T>`. Register with `AddApplicationHandlersFromAssembly` (Scrutor, `AsImplementedInterfaces`); endpoints inject the handler INTERFACE, never the concrete type.
+
+Note: modules using Aspire's `AddNpgsqlDbContext` register infrastructure on `IHostApplicationBuilder` (not `IServiceCollection`), which is the intended deviation from Acquisition's `AddDatabase(IServiceCollection, IConfiguration)`.
+
+---
+
+### 1.8 Domain primitives (mandatory)
+Domain entities/aggregates derive from the shared primitives in `ShowRoom.BuildingBlocks.Domain.Primitives`:
+- `Entity<TId>` / `Entity` — identity + `DomainEvents`/`IntegrationEvents` with `RaiseDomainEvent`/`RaiseIntegrationEvent`/`Clear...`.
+- `AggregateRoot<TId>` / `AggregateRoot`.
+- `AggregateRootWithPublicId<TId>` — adds `PublicId` (`protected set`) + `CreatePublicId(prefix)`; the derived aggregate declares its own strongly-typed `Id` (e.g. `public CustomerId Id { get; private set; }`).
+- `EntityWithPublicId`, plus `DomainEvent`/`IntegrationEvent` (`abstract record …(Guid Id)`).
+- Abstractions in `ShowRoom.BuildingBlocks.Domain.Abstractions`: `IAuditable` (marker) and `IStatefulEntity<TStatus> where TStatus : SmartEnum<TStatus>`.
+
+An HTTP-exposed aggregate is `public sealed class <Aggregate> : AggregateRootWithPublicId<<Aggregate>Id>, IAuditable`, with a private id-only constructor (`private <Aggregate>(<Aggregate>Id id) : base() => Id = id;`), a private full constructor chaining `: this(id)`, private setters, and static factories (`Create` sets `PublicId` via `PublicIdFactory.For<Aggregate>().Value`; `Restore` rehydrates). The module `DbContext` must call `modelBuilder.Ignore<DomainEvent>().Ignore<IntegrationEvent>();` so the event collections are never persisted (schema unaffected).
 
 ---
 
@@ -107,7 +193,7 @@ Each backend feature must include:
 - Every command handler must create/use a request identifier (`requestId`) and propagate it in log scope (`BeginModuleScope`).
 - Every command handler must emit `SetCommonTags(module, feature, requestId)` and add feature-specific activity tags.
 - Use explicit `LogInformation`/`LogWarning` messages for start, validation failures, domain failures, and success.
-- For create endpoints returning a new resource identifier, the command handler response must be `Result<string>` containing the created `PublicId`.
+- For create endpoints returning a new resource identifier, the command handler response must be `Result<PublicId>` containing the created `PublicId` (serialised as its string value over HTTP); never expose the technical id.
 
 ---
 

@@ -4,6 +4,9 @@ using Scalar.AspNetCore;
 using Serilog;
 using Serilog.Events;
 using Serilog.Sinks.SystemConsole.Themes;
+using ShowRoom.BuildingBlocks;
+using ShowRoom.Business.Api.Modules;
+using ShowRoom.Modules.Customer;
 using System.Diagnostics.CodeAnalysis;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -30,15 +33,14 @@ builder.Services.AddApiVersioning(options =>
     options.ReportApiVersions = true;
 });
 
-// Note: les validators FluentValidation sont enregistrés, mais ils ne sont pas exécutés automatiquement dans ce pipeline Minimal API.
-//builder.Services.AddAcquisitionModule(builder.Configuration, ModulesRegistry.Acquisition);
-//builder.Services.AddEditorialModule(builder.Configuration, ModulesRegistry.Editorial);
+// Modules registration (modulith composition root). Services are always registered;
+// the feature flag gates routing and middleware.
+builder.AddCustomerModule(ModulesRegistry.Customer);
 
 // Enregistre la source OTel du module Acquisition dans le pipeline tracing
-//builder.Services.AddOpenTelemetry()
-//    .WithTracing(tracing => tracing
-//        .AddSource(AcquisitionModule.TelemetrySourceName)
-//        .AddSource(EditorialModule.TelemetrySourceName));
+builder.Services.AddOpenTelemetry()
+    .WithTracing(tracing => tracing
+        .AddSource(CustomerModule.TelemetrySourceName));
 
 var app = builder.Build();
 
@@ -49,6 +51,9 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
     app.MapScalarApiReference();
+
+    // Apply migrations and seed demo data for local development.
+    await app.Services.InitializeCustomerModuleAsync();
 }
 else
 {
@@ -58,6 +63,9 @@ else
 }
 
 app.UseHttpsRedirection();
+
+// Module middleware, gated by the module feature flag.
+app.RegisterCustomerModule(ModulesRegistry.Customer);
 
 var versionSet = app.NewApiVersionSet()
     .HasApiVersion(new ApiVersion(1))
@@ -78,11 +86,9 @@ api.MapGet("/status", () => Results.Ok(new
 var versionedApi = api.MapGroup("/v{version:apiVersion}")
     .WithApiVersionSet(versionSet);
 
-//versionedApi.MapAcquisitionModule();
-//versionedApi.MapEditorialModule();
-
-//app.RegisterAcquisitionModule(ModulesRegistry.Acquisition);
-//app.RegisterEditorialModule(ModulesRegistry.Editorial);
+// Modules endpoints (mapped under /api/v{version}). Routes are always mapped so DI/routing stay
+// consistent; the feature flag gates module middleware via RegisterCustomerModule.
+versionedApi.MapCustomerModule();
 
 app.Run();
 

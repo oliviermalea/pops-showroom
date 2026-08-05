@@ -11,11 +11,20 @@
     <Project Path="src/buildingblocks/ShowRoom.BuildingBlocks/ShowRoom.BuildingBlocks.csproj" Id="7c5bdd51-2dc5-480a-80e6-6cdb3e6b6026" />
   </Folder>
   <Folder Name="/src/Modules/" />
-  <Folder Name="/src/Modules/Customer/" />
+  <Folder Name="/src/Modules/Customer/">
+    <Project Path="src/modules/ShowRoom.Modules.Customer/ShowRoom.Modules.Customer.csproj" />
+  </Folder>
   <Folder Name="/src/Modules/Product/">
     <Project Path="src/modules/ShowRoom.Modules.Product/ShowRoom.Modules.Product.csproj" Id="3fb15f69-31e3-4e50-a820-5a04272966ec" />
   </Folder>
-  <Folder Name="/src/SharedKernel/" />
+  <Folder Name="/src/SharedKernel/">
+    <Project Path="src/sharedkernel/ShowRoom.SharedKernel/ShowRoom.SharedKernel.csproj" />
+  </Folder>
   <Folder Name="/src/Websites/" />
-  <Folder Name="/tests/" />
+  <Folder Name="/tests/">
+    <Project Path="tests/ShowRoom.Testing/ShowRoom.Testing.csproj" />
+    <Project Path="tests/ShowRoom.Modules.Customer.Tests/ShowRoom.Modules.Customer.Tests.csproj" />
+    <Project Path="tests/ShowRoom.Modules.Customer.IntegrationTests/ShowRoom.Modules.Customer.IntegrationTests.csproj" />
+    <Project Path="tests/ShowRoom.Architecture.Tests/ShowRoom.Architecture.Tests.csproj" />
+  </Folder>
 </Solution>

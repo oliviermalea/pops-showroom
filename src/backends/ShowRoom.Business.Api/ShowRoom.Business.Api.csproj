@@ -29,6 +29,7 @@
 	<ItemGroup>
 	  <ProjectReference Include="..\..\aspire\ShowRoom.ServiceDefaults\ShowRoom.ServiceDefaults.csproj" />
 	  <ProjectReference Include="..\..\modules\ShowRoom.Modules.Product\ShowRoom.Modules.Product.csproj" />
+	  <ProjectReference Include="..\..\modules\ShowRoom.Modules.Customer\ShowRoom.Modules.Customer.csproj" />
 	</ItemGroup>
 
 </Project>

@@ -76,6 +76,7 @@ If multiple rules conflict, apply in this order:
 - Validate untrusted inputs at system boundaries.
 - Keep failure handling explicit (timeouts/retries/fallbacks where relevant).
 - Favor short critical transactions and decoupled side effects when appropriate.
+- Prefer `Result`/`Error` over exceptions for expected, handleable outcomes; reserve exceptions for truly exceptional or unrecoverable cases.
 
 ---
 
