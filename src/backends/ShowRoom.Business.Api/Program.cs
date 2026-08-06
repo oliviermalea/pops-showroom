@@ -4,12 +4,16 @@ using Scalar.AspNetCore;
 using Serilog;
 using Serilog.Events;
 using Serilog.Sinks.SystemConsole.Themes;
-using ShowRoom.BuildingBlocks;
 using ShowRoom.Business.Api.Modules;
 using ShowRoom.Modules.Customer;
 using ShowRoom.Modules.Order;
+using ShowRoom.Modules.Order.Contracts.Messaging;
+using ShowRoom.Modules.Order.Features.Messaging;
+using ShowRoom.Modules.Order.Persistence;
 using ShowRoom.Modules.Product;
 using System.Diagnostics.CodeAnalysis;
+using Wolverine;
+using Wolverine.RabbitMQ;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -40,6 +44,31 @@ builder.Services.AddApiVersioning(options =>
 builder.AddCustomerModule(ModulesRegistry.Customer);
 builder.AddOrderModule(ModulesRegistry.Order);
 builder.AddProductModule(ModulesRegistry.Product);
+
+// Messaging (AMQP / RabbitMQ via Wolverine). Machine-to-machine calls between modules go through the
+// broker with request/reply (IMessageBus.InvokeAsync) — never HTTP. DisableConventionalLocalRouting
+// forces the request onto RabbitMQ even though the modules currently share one process, which is the
+// seam that lets the Order module be extracted into its own service later.
+builder.Host.UseWolverine(opts =>
+{
+    opts.UseRabbitMqUsingNamedConnection("messaging").AutoProvision();
+
+    opts.Policies.DisableConventionalLocalRouting();
+
+    // EF Core's AddDbContext uses a factory registration Wolverine's codegen can't inline; route the
+    // DbContext through the service locator (Wolverine 6 forbids implicit service location by default).
+    opts.CodeGeneration.AlwaysUseServiceLocationFor<OrdersContext>();
+
+    opts.PublishMessage<GetOrdersForCustomer>()
+        .ToRabbitQueue(OrderMessagingContract.GetOrdersForCustomerQueue);
+    opts.ListenToRabbitQueue(OrderMessagingContract.GetOrdersForCustomerQueue);
+
+    // Only the Order module's message handler is a Wolverine handler; the modules' REPR
+    // IQueryHandler/ICommandHandler types use a different (non-Wolverine) convention and must not be
+    // scanned as message handlers.
+    opts.Discovery.DisableConventionalDiscovery();
+    opts.Discovery.IncludeType(typeof(GetOrdersForCustomerMessageHandler));
+});
 
 // Enregistre les sources OTel des modules dans le pipeline tracing
 builder.Services.AddOpenTelemetry()

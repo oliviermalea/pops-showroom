@@ -16,6 +16,7 @@
   </Folder>
   <Folder Name="/src/Modules/Order/">
     <Project Path="src/modules/ShowRoom.Modules.Order/ShowRoom.Modules.Order.csproj" />
+    <Project Path="src/modules/ShowRoom.Modules.Order.Contracts/ShowRoom.Modules.Order.Contracts.csproj" />
   </Folder>
   <Folder Name="/src/Modules/Product/">
     <Project Path="src/modules/ShowRoom.Modules.Product/ShowRoom.Modules.Product.csproj" Id="3fb15f69-31e3-4e50-a820-5a04272966ec" />

@@ -27,6 +27,7 @@ If multiple rules conflict, apply in this order:
 - No hidden coupling between modules (code, data, or runtime dependencies).
 - Prefer explicit interfaces/contracts over implicit internal access.
 - Breaking changes must be versioned (API and events), never silent destructive changes.
+- **Machine-to-machine communication (module-to-module and service-to-service) must use asynchronous AMQP messaging (RabbitMQ via Wolverine), never HTTP.** A module obtains another module's data only through that module's explicit message contract over the bus (request/reply via `IMessageBus.InvokeAsync`), never via HTTP calls, a shared database, or internal type access. HTTP is reserved for the outside world calling into the system.
 - The primary identifier must always be a StronglyTypedId.
 - Only PublicId should be exposed over HTTP.
 - Binary or low cardinality statuses should be implemented as ValueObject or SmartEnum, with a preference for ValueObject when there are only two values.
@@ -67,6 +68,7 @@ If multiple rules conflict, apply in this order:
 - Preserve/extend health and readiness semantics when applicable.
 - Avoid introducing opaque behavior that reduces diagnosability.
 - Use explicit observability extensions (e.g., `BeginModuleScope`) in relevant handlers.
+- Message-based (AMQP/Wolverine) flows must be observable end-to-end: register the Wolverine OpenTelemetry ActivitySource and meter, rely on trace-context propagation across the broker so producer and consumer spans belong to a single distributed trace, and enrich handler spans/logs with module/feature/correlation tags.
 - Use the singular form "Acquisition" for observability nomenclature in routes, logs, tags, and business names to ensure uniformity.
 
 ---

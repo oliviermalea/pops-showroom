@@ -4,6 +4,7 @@
 - Modulith boundaries are mandatory: `Features -> Domain`, `Features -> Persistence`, `Persistence -> Domain` (Domain is pure); reverse directions are forbidden. No repository pattern — feature handlers use the module DbContext directly.
 - Minimal APIs only. MVC Controllers/attributes are forbidden.
 - MediatR is forbidden. AutoMapper is forbidden. Use Scrutor for DI.
+- Machine-to-machine (module-to-module / service-to-service) communication MUST use AMQP messaging (RabbitMQ via **Wolverine**, request/reply `IMessageBus.InvokeAsync`), never HTTP. A module reads another module's data only through that module's `*.Contracts` message contract over the bus — never via HTTP, a shared DB, or internal access. Wolverine is allowed ONLY as the messaging transport; features still use the `IQueryHandler`/`ICommandHandler` + Scrutor convention (Wolverine must NOT be used as an in-process mediator for feature handlers — MediatR-style usage stays forbidden).
 - Each feature must use VSA + REPR:
   - Request (or Command/Query)
   - Endpoint
@@ -216,6 +217,17 @@ Before implementation, define:
 - Integration Events: external/module-to-module/system contracts
 - Breaking event changes => create a new event version + temporary coexistence
 
+### 3.4 Machine-to-machine messaging (AMQP / Wolverine) — mandatory
+Cross-module (and future cross-service) data exchange goes over **RabbitMQ via Wolverine**, never HTTP.
+
+- **Contract placement:** request/reply message types live in the owning module's `*.Contracts` assembly (pure records, no `Domain/Features/Persistence` or messaging-framework dependency). Consumers reference only the `*.Contracts` assembly of the module they call.
+- **Consumer side (data owner):** the owning module implements a Wolverine message handler (`public Task<TResponse> Handle(TRequest, <deps>, CancellationToken)`) that answers from its own `DbContext`. Wolverine discovery is explicit (`opts.Discovery.DisableConventionalDiscovery().IncludeType<THandler>()`) so the modules' REPR `IQueryHandler`/`ICommandHandler` types are never scanned as message handlers.
+- **Caller side:** wrap `IMessageBus.InvokeAsync<TResponse>(request)` behind a small anti-corruption gateway interface in the caller module (do not inject `IMessageBus` directly into a feature handler — keeps the handler unit-testable). The feature handler orchestrates the gateway.
+- **Force the broker:** even while modules share one process (modulith), configure `opts.Policies.DisableConventionalLocalRouting()` + explicit `PublishMessage<T>().ToRabbitQueue(...)` + `ListenToRabbitQueue(...)` so the request genuinely transits RabbitMQ. This is the seam that lets a module later be extracted into its own service with no contract change.
+- **Reactive degradation:** read/query paths must degrade gracefully when the broker/remote module is unavailable or times out (Wolverine's default 5s remote-invocation timeout) — return a partial result with an availability flag rather than failing the whole request. Write paths choose an explicit failure or outbox strategy.
+- **Connection:** RabbitMQ is an Aspire resource (`AddRabbitMQ("messaging")`); the app reads it via `opts.UseRabbitMqUsingNamedConnection("messaging").AutoProvision()`.
+- **Tests:** stub external transports by default in the shared test harness (`services.DisableAllExternalWolverineTransports()`); prove behaviour with unit tests over the gateway abstraction (happy + degraded paths), and prove the real round-trip with one dedicated end-to-end test backed by a RabbitMQ Testcontainer.
+
 ---
 
 ## 4) Persistence and ACL (backend)
@@ -300,6 +312,12 @@ Include, when relevant:
 - Support progressive distinction:
   - **liveness** (process alive)
   - **readiness** (ready to receive traffic/dependencies available)
+
+### 6.4 Messaging observability (Wolverine / AMQP) — mandatory
+Message-based machine-to-machine flows (see §3.4) must be observable end-to-end:
+- Register Wolverine's OpenTelemetry **ActivitySource `"Wolverine"`** (`AddSource`) and **meter `"Wolverine*"`** (`AddMeter`, wildcard — the meter is `Wolverine:{ApplicationName}`) with the OTel tracing/metrics pipelines so send/handle spans and messaging metrics are exported. Centralise these names (e.g. `WolverineObservability`).
+- Rely on Wolverine's automatic W3C trace-context propagation across RabbitMQ: the consumer's handling span is a child of the producer's send span — a single distributed trace across the async boundary. Do not invent a parallel correlation scheme.
+- In the message handler AND the caller-side handler/gateway: derive the correlation id from `Activity.Current?.TraceId`, open `BeginModuleScope(module, feature, requestId)` with it, and enrich `Activity.Current` via `SetCommonTags(module, feature, requestId)` + business tags (result counts, availability, key public ids). Record failures on the span (`AddException`) on the degraded path, and keep structured start/success/degraded log messages.
 
 ---
 

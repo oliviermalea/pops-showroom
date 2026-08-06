@@ -5,6 +5,7 @@ using Microsoft.Extensions.Hosting;
 using ShowRoom.BuildingBlocks;
 using ShowRoom.Modules.Customer.Features.CreateCustomer;
 using ShowRoom.Modules.Customer.Features.GetCustomerByPublicId;
+using ShowRoom.Modules.Customer.Features.GetCustomerWithOrders;
 
 namespace ShowRoom.Modules.Customer;
 
@@ -53,6 +54,7 @@ public static class CustomerModule
 
         // Public-facing customer URLs always use PublicId values.
         group.MapCreateCustomer();
+        group.MapGetCustomerWithOrders();
         group.MapGetCustomerByPublicId();
 
         return endpoints;

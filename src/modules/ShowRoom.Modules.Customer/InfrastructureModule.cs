@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using ShowRoom.BuildingBlocks.Time;
+using ShowRoom.Modules.Customer.Messaging;
 using ShowRoom.Modules.Customer.Persistence;
 
 namespace ShowRoom.Modules.Customer;
@@ -18,6 +19,9 @@ public static class InfrastructureModule
 
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
+
+        // Outbound anti-corruption gateway to the Order module (AMQP request/reply, not HTTP).
+        builder.Services.AddScoped<IOrderQueryGateway, WolverineOrderQueryGateway>();
 
         builder.Services.AddValidators();
 

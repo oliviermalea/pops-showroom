@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Core;
 using Testcontainers.PostgreSql;
+using Wolverine;
 
 /// <summary>
 /// Boots the Business API against a dedicated PostgreSQL container. Module test factories override
@@ -35,10 +36,26 @@ public class BusinessWebFactory : WebApplicationFactory<Program>, IAsyncLifetime
         {
             configurationBuilder.SetBasePath(Directory.GetCurrentDirectory())
                 .AddJsonFile("appsettings.IntegrationTests.json", optional: true, reloadOnChange: true);
+
+            // Applied AFTER the json (so overrides win) and as HOST configuration (so it is visible to
+            // Program.cs when modules read connection strings / feature flags at build time). A factory
+            // that needs a real broker or extra modules supplies its values here.
+            var overrides = HostConfigurationOverrides();
+            if (overrides.Count > 0)
+            {
+                configurationBuilder.AddInMemoryCollection(overrides);
+            }
         });
 
         return base.CreateHost(builder);
     }
+
+    /// <summary>
+    /// Host-configuration overrides applied on top of appsettings.IntegrationTests.json. Empty by
+    /// default; override to inject connection strings (e.g. a real broker) or feature flags.
+    /// </summary>
+    protected virtual IDictionary<string, string?> HostConfigurationOverrides()
+        => new Dictionary<string, string?>();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -50,6 +67,14 @@ public class BusinessWebFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
         builder.ConfigureTestServices(services =>
         {
+            // By default, stub the external (RabbitMQ) transports so integration hosts boot without a
+            // broker. The dedicated end-to-end factory overrides StubExternalTransports to exercise a
+            // real broker.
+            if (StubExternalTransports)
+            {
+                services.DisableAllExternalWolverineTransports();
+            }
+
             ConfigureModuleTestServices(services);
 
             using var serviceProvider = services.BuildServiceProvider();
@@ -57,6 +82,12 @@ public class BusinessWebFactory : WebApplicationFactory<Program>, IAsyncLifetime
             InitializeModuleTestServices(scope.ServiceProvider);
         });
     }
+
+    /// <summary>
+    /// When <c>true</c> (default), Wolverine's external transports are stubbed so no RabbitMQ broker is
+    /// needed. Override to <c>false</c> in a factory that provides a real broker for end-to-end tests.
+    /// </summary>
+    protected virtual bool StubExternalTransports => true;
 
     protected virtual void ConfigureModuleTestServices(IServiceCollection services)
     {
@@ -66,7 +97,7 @@ public class BusinessWebFactory : WebApplicationFactory<Program>, IAsyncLifetime
     {
     }
 
-    public async ValueTask InitializeAsync()
+    public virtual async ValueTask InitializeAsync()
     {
         await _postgreSqlContainer.StartAsync();
     }

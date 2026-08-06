@@ -14,6 +14,8 @@
 	<ItemGroup>
 		<ProjectReference Include="..\..\buildingblocks\ShowRoom.BuildingBlocks\ShowRoom.BuildingBlocks.csproj" />
 		<ProjectReference Include="..\..\sharedkernel\ShowRoom.SharedKernel\ShowRoom.SharedKernel.csproj" />
+		<!-- Cross-module access is allowed ONLY through the Order message contract (no impl/DB access). -->
+		<ProjectReference Include="..\ShowRoom.Modules.Order.Contracts\ShowRoom.Modules.Order.Contracts.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -32,6 +34,8 @@
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
 		<PackageReference Include="Scrutor" />
+		<!-- Machine-to-machine messaging (AMQP request/reply) — never HTTP for cross-module calls. -->
+		<PackageReference Include="WolverineFx" />
 	</ItemGroup>
 
 </Project>

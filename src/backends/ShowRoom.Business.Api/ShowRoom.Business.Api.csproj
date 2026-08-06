@@ -13,6 +13,9 @@
 	<ItemGroup>
 		<PackageReference Include="OpenTelemetry.Instrumentation.EntityFrameworkCore" />
 		<PackageReference Include="Scalar.AspNetCore" />
+		<PackageReference Include="WolverineFx.RabbitMQ" />
+		<!-- Runtime (Roslyn) codegen — Wolverine 6.x no longer bundles it in the core package. -->
+		<PackageReference Include="WolverineFx.RuntimeCompilation" />
 		<PackageReference Include="Serilog" />
 		<PackageReference Include="Serilog.AspNetCore" />
 		<PackageReference Include="Serilog.Sinks.ApplicationInsights" />
