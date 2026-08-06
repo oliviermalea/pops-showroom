@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -5,9 +6,11 @@ using ShowRoom.BuildingBlocks.Application;
 using ShowRoom.BuildingBlocks.Application.Validations;
 using ShowRoom.BuildingBlocks.Domain.PublicIds;
 using ShowRoom.BuildingBlocks.Observability.Logging;
+using ShowRoom.BuildingBlocks.Observability.Tracing;
 using ShowRoom.BuildingBlocks.Results;
 using ShowRoom.BuildingBlocks.Time;
 using ShowRoom.Modules.Customer.Domain;
+using ShowRoom.Modules.Customer.Observability;
 using ShowRoom.Modules.Customer.Persistence;
 using ShowRoom.SharedKernel.Emails;
 using ShowRoom.SharedKernel.PhoneNumbers;
@@ -26,12 +29,22 @@ internal sealed class CreateCustomerCommandHandler(
 
     public async Task<Result<PublicId>> Handle(CreateCustomerCommand command, CancellationToken cancellationToken)
     {
-        using var scope = logger.BeginModuleScope(CustomerConventions.ModuleName, FeatureName);
+        var requestId = Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N");
+
+        using var scope = logger.BeginModuleScope(CustomerConventions.ModuleName, FeatureName, requestId);
+        using var activity = CustomerTelemetry.ActivitySource.StartActivity("customer.create_customer");
+
+        activity?
+            .SetCommonTags(CustomerConventions.ModuleName, FeatureName, requestId)
+            .SetTag("enduser.email", command.Email)
+            .SetTag("customer.has_phone", !string.IsNullOrWhiteSpace(command.Phone));
+
         logger.LogInformation("Processing customer creation");
 
         var validation = await validator.ValidateAsync(command, cancellationToken);
         if (!validation.IsValid)
         {
+            activity?.SetStatus(ActivityStatusCode.Error, "Validation failed");
             logger.LogWarning("Validation failed for create customer request");
             return Result<PublicId>.Fail(validation.ToErrors());
         }
@@ -39,6 +52,7 @@ internal sealed class CreateCustomerCommandHandler(
         var emailResult = Email.Create(command.Email);
         if (emailResult.IsFailure)
         {
+            activity?.SetStatus(ActivityStatusCode.Error, "Invalid email");
             return Result<PublicId>.Fail(emailResult.Errors);
         }
 
@@ -50,6 +64,7 @@ internal sealed class CreateCustomerCommandHandler(
             var phoneResult = PhoneNumber.Create(command.Phone);
             if (phoneResult.IsFailure)
             {
+                activity?.SetStatus(ActivityStatusCode.Error, "Invalid phone number");
                 return Result<PublicId>.Fail(phoneResult.Errors);
             }
 
@@ -61,6 +76,7 @@ internal sealed class CreateCustomerCommandHandler(
 
         if (emailAlreadyExists)
         {
+            activity?.SetStatus(ActivityStatusCode.Error, "Email already exists");
             logger.LogWarning("A customer with the requested email already exists");
             return Result<PublicId>.Fail(CustomerErrors.EmailAlreadyExists);
         }
@@ -76,6 +92,7 @@ internal sealed class CreateCustomerCommandHandler(
         await context.SaveChangesAsync(cancellationToken);
 
         var publicId = CreateCustomerAssembler.From(customer);
+        activity?.SetTag("customer.public_id", publicId.Value);
         logger.LogInformation("Customer created with public id {PublicId}", publicId.Value);
 
         return Result<PublicId>.Success(publicId);

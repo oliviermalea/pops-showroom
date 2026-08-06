@@ -1,9 +1,12 @@
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using ShowRoom.BuildingBlocks.Application;
 using ShowRoom.BuildingBlocks.Application.Pagination;
 using ShowRoom.BuildingBlocks.Observability.Logging;
+using ShowRoom.BuildingBlocks.Observability.Tracing;
 using ShowRoom.BuildingBlocks.Results;
+using ShowRoom.Modules.Product.Observability;
 using ShowRoom.Modules.Product.Persistence;
 
 namespace ShowRoom.Modules.Product.Features.GetProducts;
@@ -21,9 +24,18 @@ internal sealed class GetProductsHandler(
         GetProductsQuery query,
         CancellationToken cancellationToken = default)
     {
-        using var scope = logger.BeginModuleScope(ProductConventions.ModuleName, FeatureName);
+        var requestId = Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N");
+
+        using var scope = logger.BeginModuleScope(ProductConventions.ModuleName, FeatureName, requestId);
+        using var activity = ProductTelemetry.ActivitySource.StartActivity("product.get_products");
 
         var (page, pageSize) = NormalizePagination(query.Page, query.PageSize);
+
+        activity?
+            .SetCommonTags(ProductConventions.ModuleName, FeatureName, requestId)
+            .SetTag("product.page", page)
+            .SetTag("product.page_size", pageSize)
+            .SetTag("product.has_search", !string.IsNullOrWhiteSpace(query.Search));
 
         var productsQuery = context.Products.AsNoTracking();
 
@@ -47,6 +59,7 @@ internal sealed class GetProductsHandler(
             GetProductsAssembler.ToSummary,
             cancellationToken);
 
+        activity?.SetTag("product.result.total_items", paged.TotalItems);
         logger.LogInformation("Retrieved {TotalItems} products ({ReturnedItems} on page {Page})",
             paged.TotalItems,
             paged.Items.Count,

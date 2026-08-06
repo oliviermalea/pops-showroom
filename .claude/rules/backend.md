@@ -123,7 +123,7 @@ Implementation notes for this repo:
 ---
 
 ### 1.7 Module composition (mandatory)
-Each module is composed through a fixed set of root-level types (namespace `ShowRoom.Modules.<Module>`, NOT a layer), modelled on the Acquisition module:
+Each module is composed through a fixed set of root-level types (namespace `ShowRoom.Modules.<Module>`, NOT a layer), following the established module pattern (see the Customer / Order / Product modules):
 - **`<Module>Conventions`** — constants only: `ModuleName`, `Tag`, `RouteSegment`, `BaseRoute` (`"/" + RouteSegment`), `ConnectionName`, and `BuildApiBasePath(ApiVersion?)`.
 - **`<Module>Module`** — composition root exposing:
   - `Add<Module>Module(IHostApplicationBuilder, string module)` → delegates to `AddInfrastructureModule()` + `AddApplicationModule()`. Services are ALWAYS registered so DI and routes stay consistent; the feature flag gates routing/middleware only.
@@ -138,7 +138,7 @@ Feature-flag gating: module enablement is read from `FeatureManagement:<ModuleNa
 
 Handlers: implement `ShowRoom.BuildingBlocks.Application.IQueryHandler<TQuery, TResponse>` (`HandleAsync`) or `ICommandHandler<TCommand, TResponse>` (`Handle`), where `TResponse` is the `Result<T>`. Register with `AddApplicationHandlersFromAssembly` (Scrutor, `AsImplementedInterfaces`); endpoints inject the handler INTERFACE, never the concrete type.
 
-Note: modules using Aspire's `AddNpgsqlDbContext` register infrastructure on `IHostApplicationBuilder` (not `IServiceCollection`), which is the intended deviation from Acquisition's `AddDatabase(IServiceCollection, IConfiguration)`.
+Note: modules using Aspire's `AddNpgsqlDbContext` register infrastructure on `IHostApplicationBuilder` (not `IServiceCollection`), which is the intended deviation from a plain `AddDatabase(IServiceCollection, IConfiguration)` registration.
 
 ---
 
@@ -189,10 +189,11 @@ Each backend feature must include:
 ### 2.4 DI
 - Use **Scrutor** for registration of handlers/components.
 
-### 2.5 CommandHandler standard (mandatory)
-- Use the Acquisition command handler style as reference for observability and reliability.
-- Every command handler must create/use a request identifier (`requestId`) and propagate it in log scope (`BeginModuleScope`).
-- Every command handler must emit `SetCommonTags(module, feature, requestId)` and add feature-specific activity tags.
+### 2.5 Handler observability standard (mandatory)
+- Apply a single, consistent handler style for observability and reliability across **every** handler — command handlers, query handlers, AND Wolverine message handlers.
+- Every handler must derive a `requestId` from the ambient trace (`Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N")`) and propagate it in the log scope (`BeginModuleScope(module, feature, requestId)`).
+- Every handler must **open its own span** from the module's `ActivitySource` (`using var activity = <Module>Telemetry.ActivitySource.StartActivity("<module>.<snake_case_feature>");`) and enrich it with `SetCommonTags(module, feature, requestId)` + feature-specific business tags. The module `ActivitySource` name must be registered with OpenTelemetry (`AddSource`) in the hosting service.
+- Every failure branch must mark the span (`activity?.SetStatus(ActivityStatusCode.Error, "<reason>")`); the success path adds result tags (e.g. the created `public_id`, result counts).
 - Use explicit `LogInformation`/`LogWarning` messages for start, validation failures, domain failures, and success.
 - For create endpoints returning a new resource identifier, the command handler response must be `Result<PublicId>` containing the created `PublicId` (serialised as its string value over HTTP); never expose the technical id.
 
@@ -253,7 +254,7 @@ Goal: protect domain language from unstable external contracts.
 
 ### 5.1 Project structure
 - Every module must have its own test project under `tests/ShowRoom.Modules.<Module>.Tests/`.
-- The test project should be modeled after the Acquisition module pattern when practical.
+- The test project should follow the established module test pattern when practical.
 - Keep integration and persistence coverage close to the module being tested.
 - For modules exposing HTTP endpoints, add a dedicated `<Module>BusinessWebFactory` and `<Module>DatabaseConfiguration` to guarantee full endpoint isolation.
 

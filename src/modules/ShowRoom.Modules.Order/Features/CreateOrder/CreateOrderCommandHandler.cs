@@ -1,11 +1,14 @@
+using System.Diagnostics;
 using FluentValidation;
 using Microsoft.Extensions.Logging;
 using ShowRoom.BuildingBlocks.Application;
 using ShowRoom.BuildingBlocks.Application.Validations;
 using ShowRoom.BuildingBlocks.Domain.PublicIds;
 using ShowRoom.BuildingBlocks.Observability.Logging;
+using ShowRoom.BuildingBlocks.Observability.Tracing;
 using ShowRoom.BuildingBlocks.Results;
 using ShowRoom.BuildingBlocks.Time;
+using ShowRoom.Modules.Order.Observability;
 using ShowRoom.Modules.Order.Persistence;
 using OrderAggregate = ShowRoom.Modules.Order.Domain.Order;
 
@@ -22,12 +25,22 @@ internal sealed class CreateOrderCommandHandler(
 
     public async Task<Result<PublicId>> Handle(CreateOrderCommand command, CancellationToken cancellationToken)
     {
-        using var scope = logger.BeginModuleScope(OrderConventions.ModuleName, FeatureName);
+        var requestId = Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N");
+
+        using var scope = logger.BeginModuleScope(OrderConventions.ModuleName, FeatureName, requestId);
+        using var activity = OrderTelemetry.ActivitySource.StartActivity("order.create_order");
+
+        activity?
+            .SetCommonTags(OrderConventions.ModuleName, FeatureName, requestId)
+            .SetTag("order.customer.public_id", command.CustomerPublicId)
+            .SetTag("order.line_count", command.Lines.Count);
+
         logger.LogInformation("Processing order creation");
 
         var validation = await validator.ValidateAsync(command, cancellationToken);
         if (!validation.IsValid)
         {
+            activity?.SetStatus(ActivityStatusCode.Error, "Validation failed");
             logger.LogWarning("Validation failed for create order request");
             return Result<PublicId>.Fail(validation.ToErrors());
         }
@@ -45,6 +58,7 @@ internal sealed class CreateOrderCommandHandler(
 
         if (orderResult.IsFailure)
         {
+            activity?.SetStatus(ActivityStatusCode.Error, "Domain rules rejected the order");
             logger.LogWarning("Order creation rejected by domain rules");
             return Result<PublicId>.Fail(orderResult.Errors);
         }
@@ -55,6 +69,7 @@ internal sealed class CreateOrderCommandHandler(
         await context.SaveChangesAsync(cancellationToken);
 
         var publicId = CreateOrderAssembler.From(order);
+        activity?.SetTag("order.public_id", publicId.Value);
         logger.LogInformation("Order created with public id {PublicId}", publicId.Value);
 
         return Result<PublicId>.Success(publicId);

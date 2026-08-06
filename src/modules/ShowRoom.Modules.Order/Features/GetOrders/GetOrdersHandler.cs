@@ -1,10 +1,13 @@
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using ShowRoom.BuildingBlocks.Application;
 using ShowRoom.BuildingBlocks.Application.Pagination;
 using ShowRoom.BuildingBlocks.Domain.PublicIds;
 using ShowRoom.BuildingBlocks.Observability.Logging;
+using ShowRoom.BuildingBlocks.Observability.Tracing;
 using ShowRoom.BuildingBlocks.Results;
+using ShowRoom.Modules.Order.Observability;
 using ShowRoom.Modules.Order.Persistence;
 using OrderAggregate = ShowRoom.Modules.Order.Domain.Order;
 
@@ -23,9 +26,18 @@ internal sealed class GetOrdersHandler(
         GetOrdersQuery query,
         CancellationToken cancellationToken = default)
     {
-        using var scope = logger.BeginModuleScope(OrderConventions.ModuleName, FeatureName);
+        var requestId = Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N");
+
+        using var scope = logger.BeginModuleScope(OrderConventions.ModuleName, FeatureName, requestId);
+        using var activity = OrderTelemetry.ActivitySource.StartActivity("order.get_orders");
 
         var (page, pageSize) = NormalizePagination(query.Page, query.PageSize);
+
+        activity?
+            .SetCommonTags(OrderConventions.ModuleName, FeatureName, requestId)
+            .SetTag("order.page", page)
+            .SetTag("order.page_size", pageSize)
+            .SetTag("order.has_customer_filter", !string.IsNullOrWhiteSpace(query.CustomerPublicId));
 
         var ordersQuery = context.Orders.AsNoTracking();
 
@@ -33,6 +45,7 @@ internal sealed class GetOrdersHandler(
         {
             if (!PublicId.TryParse(query.CustomerPublicId, out var customerPublicId))
             {
+                activity?.SetStatus(ActivityStatusCode.Error, "Malformed customer public id filter");
                 logger.LogWarning("Rejecting order listing with malformed customer public id filter");
                 return Error.Validation(
                     "Order.InvalidCustomerFilter",
@@ -56,6 +69,7 @@ internal sealed class GetOrdersHandler(
             GetOrdersAssembler.ToSummary,
             cancellationToken);
 
+        activity?.SetTag("order.result.total_items", paged.TotalItems);
         logger.LogInformation("Retrieved {TotalItems} orders ({ReturnedItems} on page {Page})",
             paged.TotalItems,
             paged.Items.Count,

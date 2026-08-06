@@ -58,7 +58,7 @@ If multiple rules conflict, apply in this order:
 - Use clear Arrange/Act/Assert structure for automated tests.
 - Prioritize testing where business/operational risk is highest.
 - Keep architecture tests as enforcement guardrails when present.
-- For modules exposing HTTP endpoints, include a complete isolation structure inspired by Acquisition: `<Module>BusinessWebFactory` and `<Module>DatabaseConfiguration` dedicated.
+- For modules exposing HTTP endpoints, include a complete isolation structure: a dedicated `<Module>BusinessWebFactory` and `<Module>DatabaseConfiguration`.
 
 ---
 
@@ -69,7 +69,7 @@ If multiple rules conflict, apply in this order:
 - Avoid introducing opaque behavior that reduces diagnosability.
 - Use explicit observability extensions (e.g., `BeginModuleScope`) in relevant handlers.
 - Message-based (AMQP/Wolverine) flows must be observable end-to-end: register the Wolverine OpenTelemetry ActivitySource and meter, rely on trace-context propagation across the broker so producer and consumer spans belong to a single distributed trace, and enrich handler spans/logs with module/feature/correlation tags.
-- Use the singular form "Acquisition" for observability nomenclature in routes, logs, tags, and business names to ensure uniformity.
+- Keep observability nomenclature (routes, logs, tags, business names) consistent across modules to ensure uniformity.
 
 ---
 

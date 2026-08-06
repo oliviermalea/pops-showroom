@@ -278,17 +278,17 @@ The project-specific structure for `src/frontends/ShowRoom.Web` must follow this
     BackendApiOptions.cs
 
 /Features
-  /Editorial
-    /PublishArticle
+  /Product
+    /CreateProduct
       Page.razor
-      PublishArticleForm.razor
-      PublishArticleCommand.cs
-      PublishArticleFacade.cs
-    /ArticleList
+      CreateProductForm.razor
+      CreateProductCommand.cs
+      ProductFacade.cs
+    /ProductList
       Page.razor
-      ArticleCard.razor
-      GetArticlesQuery.cs
-      EditorialFacade.cs
+      ProductCard.razor
+      GetProductsQuery.cs
+      ProductFacade.cs
 
   /Identity
     /Login
@@ -296,11 +296,11 @@ The project-specific structure for `src/frontends/ShowRoom.Web` must follow this
       LoginForm.razor
       LoginFacade.cs
 
-  /Acquisition
-    /SubmitRequest
+  /Customer
+    /GetCustomerWithOrders
       Page.razor
-      SubmitRequestForm.razor
-      AcquisitionFacade.cs
+      CustomerOrdersView.razor
+      CustomerFacade.cs
 
 /Shared
   /Components
@@ -317,7 +317,7 @@ The project-specific structure for `src/frontends/ShowRoom.Web` must follow this
 
 ---
 
-## Regles validees - Editorial-01
+## Conventions frontend Blazor (validees)
 
 ### Validation Blazor
 - FluentValidation (AbstractValidator<T>), jamais DataAnnotations sur les modeles de formulaire.
@@ -327,17 +327,13 @@ The project-specific structure for `src/frontends/ShowRoom.Web` must follow this
 
 ### Facade
 - Un seul <Module>Facade par module, injecte en Scoped.
-- Blazor ne reference jamais ShowRoomBusinessApiClient directement.
-- Transformations (slug, tags) dans la Facade, pas dans le composant.
+- Blazor ne reference jamais le client d'API genere directement.
+- Transformations (formatage, mapping DTO <-> view model) dans la Facade, pas dans le composant.
 
-### Formulaire auteur
-- Action principale (Publier, published) + action secondaire (Brouillon, draft) + lien Annuler.
+### Formulaire
+- Action principale + action secondaire (le cas echeant) + lien Annuler.
 - disabled=isSubmitting pendant soumission, message erreur si echec reseau.
 - NavigationManager.NavigateTo apres succes. Jamais d'identifiants techniques dans le formulaire.
-
-### Slug
-- Auto-genere depuis le titre dans la Facade (GenerateSlug), jamais expose a l'auteur.
-- NFC -> sans diacritiques -> lowercase -> [a-z0-9-] -> espaces en tirets -> trim tirets.
 
 ### CSS scope
 - Page.razor.css scope isole par page. Variables design system uniquement (--color-*, --space-*, --font-size-*).

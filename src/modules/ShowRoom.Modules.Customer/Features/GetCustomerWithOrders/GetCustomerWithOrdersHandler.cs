@@ -7,6 +7,7 @@ using ShowRoom.BuildingBlocks.Observability.Tracing;
 using ShowRoom.BuildingBlocks.Results;
 using ShowRoom.Modules.Customer.Domain;
 using ShowRoom.Modules.Customer.Messaging;
+using ShowRoom.Modules.Customer.Observability;
 using ShowRoom.Modules.Customer.Persistence;
 using ShowRoom.Modules.Order.Contracts.Messaging;
 
@@ -24,19 +25,23 @@ public sealed class GetCustomerWithOrdersHandler(
     ILogger<GetCustomerWithOrdersHandler> logger)
     : IQueryHandler<GetCustomerWithOrdersQuery, Result<CustomerWithOrdersResponse>>
 {
-    private const string Feature = nameof(GetCustomerWithOrdersHandler);
+    private const string FeatureName = "GetCustomerWithOrders";
 
     public async Task<Result<CustomerWithOrdersResponse>> HandleAsync(
         GetCustomerWithOrdersQuery query,
         CancellationToken cancellationToken = default)
     {
-        // Correlate the log scope with the ambient trace so both the HTTP call and the downstream
+        // Correlate the log scope and span with the ambient trace so this call and the downstream
         // RabbitMQ request/reply (propagated by Wolverine) share the same request/trace id.
         var requestId = Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N");
-        using var scope = logger.BeginModuleScope(CustomerConventions.ModuleName, Feature, requestId);
-        Activity.Current?.SetCommonTags(CustomerConventions.ModuleName, Feature, requestId);
+
+        using var scope = logger.BeginModuleScope(CustomerConventions.ModuleName, FeatureName, requestId);
+        using var activity = CustomerTelemetry.ActivitySource.StartActivity("customer.get_customer_with_orders");
 
         var publicId = query.PublicId;
+        activity?
+            .SetCommonTags(CustomerConventions.ModuleName, FeatureName, requestId)
+            .SetTag("customer.public_id", publicId.Value);
 
         var customer = await context.Customers
             .AsNoTracking()
@@ -44,6 +49,7 @@ public sealed class GetCustomerWithOrdersHandler(
 
         if (customer is null)
         {
+            activity?.SetStatus(ActivityStatusCode.Error, "Customer not found");
             logger.LogWarning("Customer {PublicId} not found", publicId.Value);
             return CustomerErrors.NotFound(publicId);
         }
@@ -64,7 +70,8 @@ public sealed class GetCustomerWithOrdersHandler(
         {
             // Reactive degradation: the Order module / broker is unreachable or timed out. Return the
             // customer without their orders and flag it, rather than failing the whole request.
-            Activity.Current?.AddException(exception);
+            activity?.AddException(exception);
+            activity?.SetStatus(ActivityStatusCode.Error, "Order module unavailable");
             logger.LogWarning(
                 exception,
                 "Order module unavailable for customer {PublicId}; returning degraded result",
@@ -75,7 +82,7 @@ public sealed class GetCustomerWithOrdersHandler(
             stopwatch.Stop();
         }
 
-        Activity.Current?
+        activity?
             .SetTag("customer.orders.available", ordersAvailable)
             .SetTag("customer.orders.count", orders.Count)
             .SetTag("customer.orders.roundtrip_ms", stopwatch.ElapsedMilliseconds);

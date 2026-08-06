@@ -1,11 +1,14 @@
+using System.Diagnostics;
 using FluentValidation;
 using Microsoft.Extensions.Logging;
 using ShowRoom.BuildingBlocks.Application;
 using ShowRoom.BuildingBlocks.Application.Validations;
 using ShowRoom.BuildingBlocks.Domain.PublicIds;
 using ShowRoom.BuildingBlocks.Observability.Logging;
+using ShowRoom.BuildingBlocks.Observability.Tracing;
 using ShowRoom.BuildingBlocks.Results;
 using ShowRoom.BuildingBlocks.Time;
+using ShowRoom.Modules.Product.Observability;
 using ShowRoom.Modules.Product.Persistence;
 using ProductAggregate = ShowRoom.Modules.Product.Domain.Product;
 
@@ -22,12 +25,22 @@ internal sealed class CreateProductCommandHandler(
 
     public async Task<Result<PublicId>> Handle(CreateProductCommand command, CancellationToken cancellationToken)
     {
-        using var scope = logger.BeginModuleScope(ProductConventions.ModuleName, FeatureName);
+        var requestId = Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N");
+
+        using var scope = logger.BeginModuleScope(ProductConventions.ModuleName, FeatureName, requestId);
+        using var activity = ProductTelemetry.ActivitySource.StartActivity("product.create_product");
+
+        activity?
+            .SetCommonTags(ProductConventions.ModuleName, FeatureName, requestId)
+            .SetTag("product.name", command.Name)
+            .SetTag("product.price", command.Price);
+
         logger.LogInformation("Processing product creation");
 
         var validation = await validator.ValidateAsync(command, cancellationToken);
         if (!validation.IsValid)
         {
+            activity?.SetStatus(ActivityStatusCode.Error, "Validation failed");
             logger.LogWarning("Validation failed for create product request");
             return Result<PublicId>.Fail(validation.ToErrors());
         }
@@ -41,6 +54,7 @@ internal sealed class CreateProductCommandHandler(
 
         if (productResult.IsFailure)
         {
+            activity?.SetStatus(ActivityStatusCode.Error, "Domain rules rejected the product");
             logger.LogWarning("Product creation rejected by domain rules");
             return Result<PublicId>.Fail(productResult.Errors);
         }
@@ -51,6 +65,7 @@ internal sealed class CreateProductCommandHandler(
         await context.SaveChangesAsync(cancellationToken);
 
         var publicId = CreateProductAssembler.From(product);
+        activity?.SetTag("product.public_id", publicId.Value);
         logger.LogInformation("Product created with public id {PublicId}", publicId.Value);
 
         return Result<PublicId>.Success(publicId);
