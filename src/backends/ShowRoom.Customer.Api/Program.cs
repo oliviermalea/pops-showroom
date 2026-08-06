@@ -5,12 +5,9 @@ using Serilog;
 using Serilog.Events;
 using Serilog.Sinks.SystemConsole.Themes;
 using ShowRoom.BuildingBlocks.Observability;
-using ShowRoom.Business.Api.Modules;
-using ShowRoom.Modules.Order;
+using ShowRoom.Customer.Api.Modules;
+using ShowRoom.Modules.Customer;
 using ShowRoom.Modules.Order.Contracts.Messaging;
-using ShowRoom.Modules.Order.Features.Messaging;
-using ShowRoom.Modules.Order.Persistence;
-using ShowRoom.Modules.Product;
 using System.Diagnostics.CodeAnalysis;
 using Wolverine;
 using Wolverine.RabbitMQ;
@@ -39,38 +36,30 @@ builder.Services.AddApiVersioning(options =>
     options.ReportApiVersions = true;
 });
 
-// This service hosts the Order and Product bounded contexts. Customer lives in ShowRoom.Customer.Api
-// and reaches Order over the message bus.
-builder.AddOrderModule(ModulesRegistry.Order);
-builder.AddProductModule(ModulesRegistry.Product);
+// This service hosts only the Customer bounded context.
+builder.AddCustomerModule(ModulesRegistry.Customer);
 
-// Messaging (AMQP / RabbitMQ via Wolverine). This service is the CONSUMER of the Order query: it
-// listens on the queue and answers GetOrdersForCustomer from the Order module, replying over the bus.
-// The request originates in ShowRoom.Customer.Api, so it genuinely crosses RabbitMQ (real cross-service
-// distributed trace).
+// Messaging (AMQP / RabbitMQ via Wolverine). The Customer service is a PRODUCER: it sends
+// GetOrdersForCustomer over the broker and awaits the reply (IMessageBus.InvokeAsync). Because the
+// Order handler lives in another service, there is no local handler to short-circuit — the request
+// genuinely crosses RabbitMQ, giving a real cross-service distributed trace.
 builder.Host.UseWolverine(opts =>
 {
     opts.UseRabbitMqUsingNamedConnection("messaging").AutoProvision();
 
-    // EF Core's AddDbContext uses a factory registration Wolverine's codegen can't inline; route the
-    // DbContext through the service locator (Wolverine 6 forbids implicit service location by default).
-    opts.CodeGeneration.AlwaysUseServiceLocationFor<OrdersContext>();
+    opts.PublishMessage<GetOrdersForCustomer>()
+        .ToRabbitQueue(OrderMessagingContract.GetOrdersForCustomerQueue);
 
-    opts.ListenToRabbitQueue(OrderMessagingContract.GetOrdersForCustomerQueue);
-
-    // Register only the Order message handler; the modules' REPR IQueryHandler/ICommandHandler types
-    // use a different (non-Wolverine) convention and must never be scanned as message handlers.
+    // This service defines no Wolverine message handlers of its own.
     opts.Discovery.DisableConventionalDiscovery();
-    opts.Discovery.IncludeType(typeof(GetOrdersForCustomerMessageHandler));
 });
 
-// Observability: module traces + Wolverine messaging spans + native RabbitMQ.Client AMQP spans, plus
-// Wolverine metrics. Trace context propagated over the broker makes the consumer span here join the
-// Customer service's trace.
+// Observability: Customer module traces + Wolverine messaging spans + native RabbitMQ.Client AMQP
+// spans, plus Wolverine metrics. Wolverine propagates the W3C trace context across the broker, so the
+// consumer service's spans join this service's trace end to end.
 builder.Services.AddOpenTelemetry()
     .WithTracing(tracing => tracing
-        .AddSource(OrderModule.TelemetrySourceName)
-        .AddSource(ProductModule.TelemetrySourceName)
+        .AddSource(CustomerModule.TelemetrySourceName)
         .AddSource(WolverineObservability.ActivitySourceName)
         .AddSource(WolverineObservability.RabbitMqPublisherSourceName)
         .AddSource(WolverineObservability.RabbitMqSubscriberSourceName))
@@ -81,7 +70,6 @@ var app = builder.Build();
 
 app.MapDefaultEndpoints();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -90,15 +78,13 @@ if (app.Environment.IsDevelopment())
 else
 {
     app.UseExceptionHandler("/Error");
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
 
 app.UseHttpsRedirection();
 
-// Module middleware, gated by the module feature flag.
-app.RegisterOrderModule(ModulesRegistry.Order);
-app.RegisterProductModule(ModulesRegistry.Product);
+// Module middleware (migrations, etc.), gated by the module feature flag.
+app.RegisterCustomerModule(ModulesRegistry.Customer);
 
 var versionSet = app.NewApiVersionSet()
     .HasApiVersion(new ApiVersion(1))
@@ -119,16 +105,11 @@ api.MapGet("/status", () => Results.Ok(new
 var versionedApi = api.MapGroup("/v{version:apiVersion}")
     .WithApiVersionSet(versionSet);
 
-// Modules endpoints (mapped under /api/v{version}). Routes are always mapped so DI/routing stay
-// consistent; the feature flag gates module middleware via RegisterXModule.
-versionedApi.MapOrderModule();
-versionedApi.MapProductModule();
+versionedApi.MapCustomerModule();
 
 app.Run();
 
-/// <summary>
-/// Parametrizes the serilog App logger. 
-/// </summary>
+/// <summary>Parametrizes the serilog App logger.</summary>
 /// <returns><see cref="ILogger"/></returns>
 static Serilog.ILogger CreateSerilogAppLogger()
 {
@@ -143,7 +124,6 @@ static Serilog.ILogger CreateSerilogAppLogger()
         .Enrich.WithProperty("Application", "ShowRoom")
         .Enrich.WithProperty("Environment", Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Unknown");
 
-    // Dev : lisibilité humaine
     var devOutputTemplate = "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] [{Module}] [{Feature}] [{RequestId}] | {Message:lj}{NewLine}{Exception}";
 
     return commonEnrichment

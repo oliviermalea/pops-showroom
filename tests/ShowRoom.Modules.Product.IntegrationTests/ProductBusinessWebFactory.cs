@@ -9,7 +9,7 @@ using ShowRoom.Testing;
 /// Product module test factory: repoints <see cref="ProductsContext"/> at the factory's isolated
 /// PostgreSQL container and migrates it, giving each run a clean, isolated database.
 /// </summary>
-public sealed class ProductBusinessWebFactory : BusinessWebFactory
+public sealed class ProductBusinessWebFactory : BusinessWebFactory<Program>
 {
     protected override void ConfigureModuleTestServices(IServiceCollection services)
     {

@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
 	<PropertyGroup>
 		<TargetFramework>net10.0</TargetFramework>
@@ -6,7 +6,7 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<EnableSdkContainerDebugging>True</EnableSdkContainerDebugging>
 		<ContainerBaseImage>mcr.microsoft.com/dotnet/aspnet:10.0</ContainerBaseImage>
-		<UserSecretsId>439b0f41-6f6e-4b13-b0e0-6962dae586ac</UserSecretsId>
+		<UserSecretsId>b1d3c2a4-5e6f-4708-9a1b-2c3d4e5f6071</UserSecretsId>
 		<InterceptorsNamespaces>$(InterceptorsNamespaces);Microsoft.AspNetCore.OpenApi.Generated</InterceptorsNamespaces>
 	</PropertyGroup>
 
@@ -30,9 +30,10 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <ProjectReference Include="..\..\aspire\ShowRoom.ServiceDefaults\ShowRoom.ServiceDefaults.csproj" />
-	  <ProjectReference Include="..\..\modules\ShowRoom.Modules.Product\ShowRoom.Modules.Product.csproj" />
-	  <ProjectReference Include="..\..\modules\ShowRoom.Modules.Order\ShowRoom.Modules.Order.csproj" />
+		<ProjectReference Include="..\..\aspire\ShowRoom.ServiceDefaults\ShowRoom.ServiceDefaults.csproj" />
+		<!-- Hosts the Customer module only. Order data is obtained over the message bus via the
+		     Order.Contracts message contract (referenced transitively through the Customer module). -->
+		<ProjectReference Include="..\..\modules\ShowRoom.Modules.Customer\ShowRoom.Modules.Customer.csproj" />
 	</ItemGroup>
 
 </Project>

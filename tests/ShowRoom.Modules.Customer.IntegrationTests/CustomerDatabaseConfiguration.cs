@@ -17,6 +17,6 @@ internal sealed class CustomerDatabaseConfiguration : IDatabaseConfiguration
 
     public Dictionary<string, string?> Get() => new()
     {
-        { "ConnectionStrings:showroom-business", _connectionString },
+        { "ConnectionStrings:showroom-customers", _connectionString },
     };
 }

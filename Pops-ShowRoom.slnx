@@ -2,6 +2,7 @@
   <Folder Name="/src/" />
   <Folder Name="/src/Apis/">
     <Project Path="src/backends/ShowRoom.Business.Api/ShowRoom.Business.Api.csproj" />
+    <Project Path="src/backends/ShowRoom.Customer.Api/ShowRoom.Customer.Api.csproj" />
   </Folder>
   <Folder Name="/src/Aspire/">
     <Project Path="src/aspire/ShowRoom.AppHost/ShowRoom.AppHost.csproj" />

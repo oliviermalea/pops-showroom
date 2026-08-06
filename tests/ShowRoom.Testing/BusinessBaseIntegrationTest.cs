@@ -7,8 +7,9 @@ using ShowRoom.Testing.Database;
 /// Base class for integration tests: exposes the factory, the shared database container and a
 /// per-test DI scope.
 /// </summary>
-public abstract class BusinessBaseIntegrationTest<TFactory> : IDisposable
-    where TFactory : BusinessWebFactory
+public abstract class BusinessBaseIntegrationTest<TFactory, TEntryPoint> : IDisposable
+    where TFactory : BusinessWebFactory<TEntryPoint>
+    where TEntryPoint : class
 {
     protected BusinessBaseIntegrationTest(
         TFactory factory,

@@ -13,11 +13,13 @@ using Testcontainers.PostgreSql;
 using Wolverine;
 
 /// <summary>
-/// Boots the Business API against a dedicated PostgreSQL container. Module test factories override
-/// <see cref="ConfigureModuleTestServices"/> to point their DbContext at this container and
-/// <see cref="InitializeModuleTestServices"/> to migrate it.
+/// Boots an API (identified by <typeparamref name="TEntryPoint"/>) against a dedicated PostgreSQL
+/// container. Module test factories override <see cref="ConfigureModuleTestServices"/> to point their
+/// DbContext at this container and <see cref="InitializeModuleTestServices"/> to migrate it. Generic
+/// over the entry point so each service (Business API, Customer API, …) can reuse the same harness.
 /// </summary>
-public class BusinessWebFactory : WebApplicationFactory<Program>, IAsyncLifetime
+public class BusinessWebFactory<TEntryPoint> : WebApplicationFactory<TEntryPoint>, IAsyncLifetime
+    where TEntryPoint : class
 {
     private readonly Logger _logger = new LoggerConfiguration()
         .WriteTo.Console()

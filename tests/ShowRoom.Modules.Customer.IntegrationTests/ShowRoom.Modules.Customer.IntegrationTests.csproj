@@ -21,13 +21,12 @@
 		<PackageReference Include="AwesomeAssertions" />
 		<PackageReference Include="Bogus" />
 		<PackageReference Include="coverlet.collector" />
-		<PackageReference Include="Testcontainers.RabbitMq" />
 	</ItemGroup>
 
 	<ItemGroup>
+		<!-- Integration tests boot the Customer service host. -->
+		<ProjectReference Include="..\..\src\backends\ShowRoom.Customer.Api\ShowRoom.Customer.Api.csproj" />
 		<ProjectReference Include="..\..\src\modules\ShowRoom.Modules.Customer\ShowRoom.Modules.Customer.csproj" />
-		<!-- End-to-end messaging test seeds the Order side and exercises the real AMQP round-trip. -->
-		<ProjectReference Include="..\..\src\modules\ShowRoom.Modules.Order\ShowRoom.Modules.Order.csproj" />
 		<ProjectReference Include="..\ShowRoom.Testing\ShowRoom.Testing.csproj" />
 	</ItemGroup>
 

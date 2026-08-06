@@ -24,6 +24,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<ProjectReference Include="..\..\src\backends\ShowRoom.Business.Api\ShowRoom.Business.Api.csproj" />
 		<ProjectReference Include="..\..\src\modules\ShowRoom.Modules.Order\ShowRoom.Modules.Order.csproj" />
 		<ProjectReference Include="..\ShowRoom.Testing\ShowRoom.Testing.csproj" />
 	</ItemGroup>
