@@ -86,7 +86,7 @@ public static class CustomerModule
         builder.Services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
 
         // Outbound anti-corruption gateway to the Order service (AMQP request/reply, not HTTP).
-        builder.Services.AddScoped<IOrderQueryGateway, WolverineOrderQueryGateway>();
+        builder.Services.AddScoped<IOrderHistory, MessagingOrderHistory>();
 
         builder.Services.AddValidatorsFromAssembly(typeof(CustomerModule).Assembly, includeInternalTypes: true);
     }

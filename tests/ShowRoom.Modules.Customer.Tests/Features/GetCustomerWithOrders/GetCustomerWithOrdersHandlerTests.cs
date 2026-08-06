@@ -4,7 +4,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using ShowRoom.BuildingBlocks.Domain.PublicIds;
 using ShowRoom.BuildingBlocks.Results;
 using ShowRoom.Modules.Customer.Features.GetCustomerWithOrders;
-using ShowRoom.Modules.Customer.Features.GetCustomerWithOrders;
 using ShowRoom.Modules.Customer.Persistence;
 using ShowRoom.Modules.Order.Contracts.Messaging;
 using ShowRoom.SharedKernel.Emails;
@@ -29,15 +28,15 @@ public sealed class GetCustomerWithOrdersHandlerTests
         return customer;
     }
 
-    private sealed class StubGateway(OrdersForCustomerResponse response) : IOrderQueryGateway
+    private sealed class StubOrderHistory(OrdersForCustomerResponse response) : IOrderHistory
     {
-        public Task<OrdersForCustomerResponse> GetOrdersForCustomerAsync(string customerPublicId, CancellationToken cancellationToken = default)
+        public Task<OrdersForCustomerResponse> ForCustomerAsync(string customerPublicId, CancellationToken cancellationToken = default)
             => Task.FromResult(response);
     }
 
-    private sealed class ThrowingGateway : IOrderQueryGateway
+    private sealed class ThrowingOrderHistory : IOrderHistory
     {
-        public Task<OrdersForCustomerResponse> GetOrdersForCustomerAsync(string customerPublicId, CancellationToken cancellationToken = default)
+        public Task<OrdersForCustomerResponse> ForCustomerAsync(string customerPublicId, CancellationToken cancellationToken = default)
             => throw new TimeoutException("broker unavailable");
     }
 
@@ -51,7 +50,7 @@ public sealed class GetCustomerWithOrdersHandlerTests
         [
             new CustomerOrderSummary("ord_" + new string('a', 32), "Pending", "EUR", 25.5m, 2, DateTimeOffset.UtcNow),
         ]);
-        var sut = new GetCustomerWithOrdersHandler(context, new StubGateway(orders), NullLogger<GetCustomerWithOrdersHandler>.Instance);
+        var sut = new GetCustomerWithOrdersHandler(context, new StubOrderHistory(orders), NullLogger<GetCustomerWithOrdersHandler>.Instance);
 
         // Act
         var result = await sut.HandleAsync(new GetCustomerWithOrdersQuery(customer.PublicId));
@@ -69,7 +68,7 @@ public sealed class GetCustomerWithOrdersHandlerTests
         // Arrange
         await using var context = NewContext();
         var customer = await SeedAsync(context);
-        var sut = new GetCustomerWithOrdersHandler(context, new ThrowingGateway(), NullLogger<GetCustomerWithOrdersHandler>.Instance);
+        var sut = new GetCustomerWithOrdersHandler(context, new ThrowingOrderHistory(), NullLogger<GetCustomerWithOrdersHandler>.Instance);
 
         // Act
         var result = await sut.HandleAsync(new GetCustomerWithOrdersQuery(customer.PublicId));
@@ -89,7 +88,7 @@ public sealed class GetCustomerWithOrdersHandlerTests
         var unknown = PublicIdFactory.ForCustomer().Value;
         var sut = new GetCustomerWithOrdersHandler(
             context,
-            new StubGateway(new OrdersForCustomerResponse([])),
+            new StubOrderHistory(new OrdersForCustomerResponse([])),
             NullLogger<GetCustomerWithOrdersHandler>.Instance);
 
         // Act

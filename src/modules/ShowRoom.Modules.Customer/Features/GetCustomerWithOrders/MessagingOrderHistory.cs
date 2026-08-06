@@ -6,15 +6,15 @@ using Wolverine;
 namespace ShowRoom.Modules.Customer.Features.GetCustomerWithOrders;
 
 /// <summary>
-/// Wolverine-backed <see cref="IOrderQueryGateway"/>. Uses <c>IMessageBus.InvokeAsync</c> request/reply:
-/// the request is routed to a RabbitMQ queue (M2M over AMQP, not HTTP) and the reply is awaited
-/// (Wolverine's default 5s remote-invocation timeout applies). The outgoing envelope carries the
-/// standard <see cref="MessageHeaders"/> (module, feature, message id/type, correlation/trace id) so
-/// the consumer can correlate and enrich its logs and spans.
+/// Messaging-backed <see cref="IOrderHistory"/>. Uses <c>IMessageBus.InvokeAsync</c> request/reply: the
+/// request is routed to a RabbitMQ queue (M2M over AMQP, not HTTP) and the reply is awaited (Wolverine's
+/// default 5s remote-invocation timeout applies). The outgoing envelope carries the standard
+/// <see cref="MessageHeaders"/> (module, feature, message id/type, correlation/trace id) so the consumer
+/// can correlate and enrich its logs and spans.
 /// </summary>
-internal sealed class WolverineOrderQueryGateway(IMessageBus bus) : IOrderQueryGateway
+internal sealed class MessagingOrderHistory(IMessageBus bus) : IOrderHistory
 {
-    public Task<OrdersForCustomerResponse> GetOrdersForCustomerAsync(
+    public Task<OrdersForCustomerResponse> ForCustomerAsync(
         string customerPublicId,
         CancellationToken cancellationToken = default)
     {

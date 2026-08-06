@@ -196,7 +196,7 @@ identifiées par leur **`PublicId`** (jamais l'identifiant technique).
 - **Contrat** : `ShowRoom.Modules.Order.Contracts` — messages `GetOrdersForCustomer` /
   `OrdersForCustomerResponse`, records purs sans dépendance d'implémentation.
 - **Producteur** (Customer.Api) : `IMessageBus.InvokeAsync<OrdersForCustomerResponse>` derrière une
-  gateway anti-corruption (`IOrderQueryGateway`), avec dégradation gracieuse (timeout Wolverine 5 s).
+  port anti-corruption (`IOrderHistory`), avec dégradation gracieuse (timeout Wolverine 5 s).
 - **Consommateur** (Business.Api) : handler Wolverine écoutant la file RabbitMQ, répondant depuis
   `OrdersContext`.
 - **Traces** : sources OpenTelemetry `Wolverine` + `RabbitMQ.Client.*` enregistrées ; Wolverine

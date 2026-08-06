@@ -19,7 +19,7 @@ namespace ShowRoom.Modules.Customer.Features.GetCustomerWithOrders;
 /// </summary>
 public sealed class GetCustomerWithOrdersHandler(
     CustomersContext context,
-    IOrderQueryGateway orderQueryGateway,
+    IOrderHistory orderHistory,
     ILogger<GetCustomerWithOrdersHandler> logger)
     : IQueryHandler<GetCustomerWithOrdersQuery, Result<CustomerWithOrdersResponse>>
 {
@@ -59,7 +59,7 @@ public sealed class GetCustomerWithOrdersHandler(
         try
         {
             logger.LogInformation("Requesting orders for customer {PublicId} over the message bus", publicId.Value);
-            var response = await orderQueryGateway.GetOrdersForCustomerAsync(publicId.Value, cancellationToken);
+            var response = await orderHistory.ForCustomerAsync(publicId.Value, cancellationToken);
             orders = response.Orders;
             ordersAvailable = true;
             logger.LogInformation("Received {Count} orders for customer {PublicId}", orders.Count, publicId.Value);
