@@ -6,7 +6,6 @@ using ShowRoom.BuildingBlocks.Observability.Logging;
 using ShowRoom.BuildingBlocks.Observability.Tracing;
 using ShowRoom.BuildingBlocks.Results;
 using ShowRoom.Modules.Order.Domain;
-using ShowRoom.Modules.Order.Observability;
 using ShowRoom.Modules.Order.Persistence;
 
 namespace ShowRoom.Modules.Order.Features.GetOrderByPublicId;
@@ -24,12 +23,12 @@ public sealed class GetOrderByPublicIdHandler(
     {
         var requestId = Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N");
 
-        using var scope = logger.BeginModuleScope(OrderConventions.ModuleName, FeatureName, requestId);
-        using var activity = OrderTelemetry.ActivitySource.StartActivity("order.get_order_by_public_id");
+        using var scope = logger.BeginModuleScope(OrderModule.ModuleName, FeatureName, requestId);
+        using var activity = OrderModule.ActivitySource.StartActivity("order.get_order_by_public_id");
 
         var publicId = query.PublicId;
         activity?
-            .SetCommonTags(OrderConventions.ModuleName, FeatureName, requestId)
+            .SetCommonTags(OrderModule.ModuleName, FeatureName, requestId)
             .SetTag("order.public_id", publicId.Value);
 
         logger.LogInformation("Fetching order by public id {PublicId}", publicId.Value);

@@ -1,10 +1,10 @@
 using ShowRoom.Modules.Order.Contracts.Messaging;
 using OrderAggregate = ShowRoom.Modules.Order.Domain.Order;
 
-namespace ShowRoom.Modules.Order.Features.Messaging;
+namespace ShowRoom.Modules.Order.Features.GetOrdersForCustomer;
 
 /// <summary>
-/// Maps Order aggregates to the cross-module <see cref="OrdersForCustomerResponse"/> reply. Only public
+/// Maps Order aggregates to the cross-service <see cref="OrdersForCustomerResponse"/> reply. Only public
 /// ids and denormalised values cross the boundary — no domain types leak.
 /// </summary>
 public static class GetOrdersForCustomerAssembler

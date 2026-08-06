@@ -8,6 +8,11 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<InternalsVisibleTo Include="ShowRoom.Modules.Order.Tests" />
+		<InternalsVisibleTo Include="ShowRoom.Modules.Order.IntegrationTests" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<FrameworkReference Include="Microsoft.AspNetCore.App" />
 	</ItemGroup>
 
@@ -32,6 +37,8 @@
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
 		<PackageReference Include="Scrutor" />
+		<!-- The message handler reads the standard MessageHeaders from the Wolverine Envelope. -->
+		<PackageReference Include="WolverineFx" />
 	</ItemGroup>
 
 </Project>

@@ -10,7 +10,6 @@ using ShowRoom.BuildingBlocks.Observability.Tracing;
 using ShowRoom.BuildingBlocks.Results;
 using ShowRoom.BuildingBlocks.Time;
 using ShowRoom.Modules.Customer.Domain;
-using ShowRoom.Modules.Customer.Observability;
 using ShowRoom.Modules.Customer.Persistence;
 using ShowRoom.SharedKernel.Emails;
 using ShowRoom.SharedKernel.PhoneNumbers;
@@ -31,11 +30,11 @@ internal sealed class CreateCustomerCommandHandler(
     {
         var requestId = Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N");
 
-        using var scope = logger.BeginModuleScope(CustomerConventions.ModuleName, FeatureName, requestId);
-        using var activity = CustomerTelemetry.ActivitySource.StartActivity("customer.create_customer");
+        using var scope = logger.BeginModuleScope(CustomerModule.ModuleName, FeatureName, requestId);
+        using var activity = CustomerModule.ActivitySource.StartActivity("customer.create_customer");
 
         activity?
-            .SetCommonTags(CustomerConventions.ModuleName, FeatureName, requestId)
+            .SetCommonTags(CustomerModule.ModuleName, FeatureName, requestId)
             .SetTag("enduser.email", command.Email)
             .SetTag("customer.has_phone", !string.IsNullOrWhiteSpace(command.Phone));
 

@@ -4,16 +4,13 @@ using Scalar.AspNetCore;
 using Serilog;
 using Serilog.Events;
 using Serilog.Sinks.SystemConsole.Themes;
+using ShowRoom.BuildingBlocks.Messaging;
 using ShowRoom.BuildingBlocks.Observability;
 using ShowRoom.Business.Api.Modules;
 using ShowRoom.Modules.Order;
-using ShowRoom.Modules.Order.Contracts.Messaging;
-using ShowRoom.Modules.Order.Features.Messaging;
-using ShowRoom.Modules.Order.Persistence;
 using ShowRoom.Modules.Product;
 using System.Diagnostics.CodeAnalysis;
 using Wolverine;
-using Wolverine.RabbitMQ;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -44,25 +41,11 @@ builder.Services.AddApiVersioning(options =>
 builder.AddOrderModule(ModulesRegistry.Order);
 builder.AddProductModule(ModulesRegistry.Product);
 
-// Messaging (AMQP / RabbitMQ via Wolverine). This service is the CONSUMER of the Order query: it
-// listens on the queue and answers GetOrdersForCustomer from the Order module, replying over the bus.
-// The request originates in ShowRoom.Customer.Api, so it genuinely crosses RabbitMQ (real cross-service
-// distributed trace).
-builder.Host.UseWolverine(opts =>
-{
-    opts.UseRabbitMqUsingNamedConnection("messaging").AutoProvision();
-
-    // EF Core's AddDbContext uses a factory registration Wolverine's codegen can't inline; route the
-    // DbContext through the service locator (Wolverine 6 forbids implicit service location by default).
-    opts.CodeGeneration.AlwaysUseServiceLocationFor<OrdersContext>();
-
-    opts.ListenToRabbitQueue(OrderMessagingContract.GetOrdersForCustomerQueue);
-
-    // Register only the Order message handler; the modules' REPR IQueryHandler/ICommandHandler types
-    // use a different (non-Wolverine) convention and must never be scanned as message handlers.
-    opts.Discovery.DisableConventionalDiscovery();
-    opts.Discovery.IncludeType(typeof(GetOrdersForCustomerMessageHandler));
-});
+// Messaging (AMQP / RabbitMQ via Wolverine). The transport is configured centrally from the "Messaging"
+// section; the Order module contributes its listener + message handler via an IWolverineExtension
+// registered in AddOrderModule (see Messaging/MessagingModule), so this host stays agnostic of module
+// specifics. The request originates in ShowRoom.Customer.Api, so it genuinely crosses RabbitMQ.
+builder.Host.UseWolverine(opts => opts.ConfigureShowRoomMessaging(builder.Configuration));
 
 // Observability: module traces + Wolverine messaging spans + native RabbitMQ.Client AMQP spans, plus
 // Wolverine metrics. Trace context propagated over the broker makes the consumer span here join the

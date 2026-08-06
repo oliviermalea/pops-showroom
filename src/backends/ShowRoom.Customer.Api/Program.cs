@@ -4,13 +4,12 @@ using Scalar.AspNetCore;
 using Serilog;
 using Serilog.Events;
 using Serilog.Sinks.SystemConsole.Themes;
+using ShowRoom.BuildingBlocks.Messaging;
 using ShowRoom.BuildingBlocks.Observability;
 using ShowRoom.Customer.Api.Modules;
 using ShowRoom.Modules.Customer;
-using ShowRoom.Modules.Order.Contracts.Messaging;
 using System.Diagnostics.CodeAnalysis;
 using Wolverine;
-using Wolverine.RabbitMQ;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -39,20 +38,10 @@ builder.Services.AddApiVersioning(options =>
 // This service hosts only the Customer bounded context.
 builder.AddCustomerModule(ModulesRegistry.Customer);
 
-// Messaging (AMQP / RabbitMQ via Wolverine). The Customer service is a PRODUCER: it sends
-// GetOrdersForCustomer over the broker and awaits the reply (IMessageBus.InvokeAsync). Because the
-// Order handler lives in another service, there is no local handler to short-circuit — the request
-// genuinely crosses RabbitMQ, giving a real cross-service distributed trace.
-builder.Host.UseWolverine(opts =>
-{
-    opts.UseRabbitMqUsingNamedConnection("messaging").AutoProvision();
-
-    opts.PublishMessage<GetOrdersForCustomer>()
-        .ToRabbitQueue(OrderMessagingContract.GetOrdersForCustomerQueue);
-
-    // This service defines no Wolverine message handlers of its own.
-    opts.Discovery.DisableConventionalDiscovery();
-});
+// Messaging (AMQP / RabbitMQ via Wolverine). The transport is configured centrally from the "Messaging"
+// section; the Customer module contributes its own outbound routes via an IWolverineExtension registered
+// in AddCustomerModule (see Messaging/MessagingModule), so this host stays agnostic of module specifics.
+builder.Host.UseWolverine(opts => opts.ConfigureShowRoomMessaging(builder.Configuration));
 
 // Observability: Customer module traces + Wolverine messaging spans + native RabbitMQ.Client AMQP
 // spans, plus Wolverine metrics. Wolverine propagates the W3C trace context across the broker, so the

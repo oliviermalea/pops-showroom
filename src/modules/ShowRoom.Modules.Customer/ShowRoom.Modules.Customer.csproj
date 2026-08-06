@@ -8,6 +8,11 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<InternalsVisibleTo Include="ShowRoom.Modules.Customer.Tests" />
+		<InternalsVisibleTo Include="ShowRoom.Modules.Customer.IntegrationTests" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<FrameworkReference Include="Microsoft.AspNetCore.App" />
 	</ItemGroup>
 

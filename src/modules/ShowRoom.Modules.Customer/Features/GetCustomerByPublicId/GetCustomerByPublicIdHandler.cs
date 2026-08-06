@@ -6,7 +6,6 @@ using ShowRoom.BuildingBlocks.Observability.Logging;
 using ShowRoom.BuildingBlocks.Observability.Tracing;
 using ShowRoom.BuildingBlocks.Results;
 using ShowRoom.Modules.Customer.Domain;
-using ShowRoom.Modules.Customer.Observability;
 using ShowRoom.Modules.Customer.Persistence;
 
 namespace ShowRoom.Modules.Customer.Features.GetCustomerByPublicId;
@@ -24,12 +23,12 @@ public sealed class GetCustomerByPublicIdHandler(
     {
         var requestId = Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N");
 
-        using var scope = logger.BeginModuleScope(CustomerConventions.ModuleName, FeatureName, requestId);
-        using var activity = CustomerTelemetry.ActivitySource.StartActivity("customer.get_customer_by_public_id");
+        using var scope = logger.BeginModuleScope(CustomerModule.ModuleName, FeatureName, requestId);
+        using var activity = CustomerModule.ActivitySource.StartActivity("customer.get_customer_by_public_id");
 
         var publicId = query.PublicId;
         activity?
-            .SetCommonTags(CustomerConventions.ModuleName, FeatureName, requestId)
+            .SetCommonTags(CustomerModule.ModuleName, FeatureName, requestId)
             .SetTag("customer.public_id", publicId.Value);
 
         logger.LogInformation("Fetching customer by public id {PublicId}", publicId.Value);

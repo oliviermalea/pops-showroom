@@ -43,7 +43,7 @@ internal static class CreateCustomerEndpoint
 
         var publicId = result.Value.Value;
         var urlPart = httpContext.GetUrlPart();
-        var basePath = CustomerConventions.BuildApiBasePath(urlPart.Version);
+        var basePath = CustomerModule.BuildApiBasePath(urlPart.Version);
         var location = $"{urlPart.Scheme}://{urlPart.Host}{basePath}/{publicId}";
 
         return Results.Created(location, publicId);

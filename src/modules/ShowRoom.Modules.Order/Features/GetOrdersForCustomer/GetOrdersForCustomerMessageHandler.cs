@@ -2,41 +2,51 @@ using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using ShowRoom.BuildingBlocks.Domain.PublicIds;
+using ShowRoom.BuildingBlocks.Messaging;
 using ShowRoom.BuildingBlocks.Observability.Logging;
 using ShowRoom.BuildingBlocks.Observability.Tracing;
 using ShowRoom.Modules.Order.Contracts.Messaging;
-using ShowRoom.Modules.Order.Observability;
 using ShowRoom.Modules.Order.Persistence;
+using Wolverine;
+// Alias: the message type shares its name with this slice's namespace segment.
+using GetOrdersForCustomerRequest = ShowRoom.Modules.Order.Contracts.Messaging.GetOrdersForCustomer;
 
-namespace ShowRoom.Modules.Order.Features.Messaging;
+namespace ShowRoom.Modules.Order.Features.GetOrdersForCustomer;
 
 /// <summary>
-/// Wolverine message handler answering the cross-service <see cref="GetOrdersForCustomer"/> request
-/// over RabbitMQ (AMQP request/reply). This is the Order module's machine-to-machine surface: other
-/// services obtain order data through this message contract, never via HTTP or direct DB access. The
-/// returned <see cref="OrdersForCustomerResponse"/> is sent back to the caller as the reply. The request
-/// originates in ShowRoom.Customer.Api, so it genuinely crosses the broker.
+/// Wolverine message handler answering the cross-service <c>GetOrdersForCustomer</c> request over
+/// RabbitMQ (AMQP request/reply). This is the Order module's machine-to-machine surface: other services
+/// obtain order data through this message contract, never via HTTP or direct DB access. The returned
+/// <see cref="OrdersForCustomerResponse"/> is sent back to the caller as the reply.
 /// </summary>
 public sealed class GetOrdersForCustomerMessageHandler
 {
     private const string FeatureName = "GetOrdersForCustomer";
 
     public async Task<OrdersForCustomerResponse> Handle(
-        GetOrdersForCustomer message,
+        GetOrdersForCustomerRequest message,
+        Envelope envelope,
         OrdersContext context,
         ILogger<GetOrdersForCustomerMessageHandler> logger,
         CancellationToken cancellationToken)
     {
-        // Wolverine propagated the trace context from the caller across RabbitMQ, so this TraceId
-        // correlates both sides of the message boundary; the span below is a child of the consumer span.
-        var requestId = Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N");
+        // Read the standard headers set by the producer to correlate this consumer with the caller.
+        // The correlation id falls back to the propagated trace id, then a fresh id.
+        var correlationId = envelope.Headers.GetValueOrDefault(MessageHeaders.CorrelationId)
+            ?? Activity.Current?.TraceId.ToString()
+            ?? Guid.NewGuid().ToString("N");
+        var callerModule = envelope.Headers.GetValueOrDefault(MessageHeaders.ModuleName);
+        var callerFeature = envelope.Headers.GetValueOrDefault(MessageHeaders.FeatureName);
 
-        using var scope = logger.BeginModuleScope(OrderConventions.ModuleName, FeatureName, requestId);
-        using var activity = OrderTelemetry.ActivitySource.StartActivity("order.get_orders_for_customer");
+        using var scope = logger.BeginModuleScope(OrderModule.ModuleName, FeatureName, correlationId);
+        using var activity = OrderModule.ActivitySource.StartActivity("order.get_orders_for_customer");
 
         activity?
-            .SetCommonTags(OrderConventions.ModuleName, FeatureName, requestId)
+            .SetCommonTags(OrderModule.ModuleName, FeatureName, correlationId)
             .SetTag("messaging.system", "rabbitmq")
+            .SetTag("messaging.caller.module", callerModule)
+            .SetTag("messaging.caller.feature", callerFeature)
+            .SetTag("messaging.message_id", envelope.Headers.GetValueOrDefault(MessageHeaders.MessageId))
             .SetTag("order.customer.public_id", message.CustomerPublicId);
 
         if (!PublicId.TryParse(message.CustomerPublicId, out var customerPublicId))

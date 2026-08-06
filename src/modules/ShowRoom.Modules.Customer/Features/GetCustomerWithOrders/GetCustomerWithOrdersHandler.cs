@@ -6,8 +6,6 @@ using ShowRoom.BuildingBlocks.Observability.Logging;
 using ShowRoom.BuildingBlocks.Observability.Tracing;
 using ShowRoom.BuildingBlocks.Results;
 using ShowRoom.Modules.Customer.Domain;
-using ShowRoom.Modules.Customer.Messaging;
-using ShowRoom.Modules.Customer.Observability;
 using ShowRoom.Modules.Customer.Persistence;
 using ShowRoom.Modules.Order.Contracts.Messaging;
 
@@ -35,12 +33,12 @@ public sealed class GetCustomerWithOrdersHandler(
         // RabbitMQ request/reply (propagated by Wolverine) share the same request/trace id.
         var requestId = Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N");
 
-        using var scope = logger.BeginModuleScope(CustomerConventions.ModuleName, FeatureName, requestId);
-        using var activity = CustomerTelemetry.ActivitySource.StartActivity("customer.get_customer_with_orders");
+        using var scope = logger.BeginModuleScope(CustomerModule.ModuleName, FeatureName, requestId);
+        using var activity = CustomerModule.ActivitySource.StartActivity("customer.get_customer_with_orders");
 
         var publicId = query.PublicId;
         activity?
-            .SetCommonTags(CustomerConventions.ModuleName, FeatureName, requestId)
+            .SetCommonTags(CustomerModule.ModuleName, FeatureName, requestId)
             .SetTag("customer.public_id", publicId.Value);
 
         var customer = await context.Customers

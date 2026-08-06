@@ -8,8 +8,8 @@ namespace ShowRoom.Business.Api.Modules;
 /// </summary>
 internal record class ModulesRegistry(string Value)
 {
-    internal static readonly ModulesRegistry Order = new(OrderConventions.ModuleName);
-    internal static readonly ModulesRegistry Product = new(ProductConventions.ModuleName);
+    internal static readonly ModulesRegistry Order = new(OrderModule.ModuleName);
+    internal static readonly ModulesRegistry Product = new(ProductModule.ModuleName);
 
     public static implicit operator string(ModulesRegistry module) => module.Value;
 }

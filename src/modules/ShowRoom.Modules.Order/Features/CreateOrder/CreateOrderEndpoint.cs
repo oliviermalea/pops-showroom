@@ -42,7 +42,7 @@ internal static class CreateOrderEndpoint
 
         var publicId = result.Value.Value;
         var urlPart = httpContext.GetUrlPart();
-        var basePath = OrderConventions.BuildApiBasePath(urlPart.Version);
+        var basePath = OrderModule.BuildApiBasePath(urlPart.Version);
         var location = $"{urlPart.Scheme}://{urlPart.Host}{basePath}/{publicId}";
 
         return Results.Created(location, publicId);

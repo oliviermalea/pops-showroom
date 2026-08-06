@@ -20,6 +20,9 @@
 		<PackageReference Include="Microsoft.EntityFrameworkCore.Analyzers" />
 		<PackageReference Include="Microsoft.FeatureManagement" />
 		<PackageReference Include="Scrutor" />
+		<!-- Messaging building blocks: Wolverine transport configuration (ConfigureShowRoomMessaging). -->
+		<PackageReference Include="WolverineFx" />
+		<PackageReference Include="WolverineFx.RabbitMQ" />
 	</ItemGroup>
 	
 </Project>

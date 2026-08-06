@@ -1,11 +1,11 @@
 using AwesomeAssertions;
 using ShowRoom.BuildingBlocks.Domain.PublicIds;
 using ShowRoom.Modules.Order.Domain;
-using ShowRoom.Modules.Order.Features.Messaging;
+using ShowRoom.Modules.Order.Features.GetOrdersForCustomer;
 using Xunit;
 using OrderAggregate = ShowRoom.Modules.Order.Domain.Order;
 
-namespace ShowRoom.Modules.Order.Tests.Features.Messaging.Assemblers;
+namespace ShowRoom.Modules.Order.Tests.Features.GetOrdersForCustomer.Assemblers;
 
 public sealed class GetOrdersForCustomerAssemblerTests
 {

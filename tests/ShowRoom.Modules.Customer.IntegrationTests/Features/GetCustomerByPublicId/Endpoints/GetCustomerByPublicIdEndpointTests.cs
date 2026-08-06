@@ -20,7 +20,7 @@ public class GetCustomerByPublicIdEndpointTests(
     : IClassFixture<CustomerBusinessWebFactory>,
       IClassFixture<DatabaseContainer>
 {
-    private static readonly string CustomersRoute = $"/api/v1/{CustomerConventions.RouteSegment}";
+    private static readonly string CustomersRoute = $"/api/v1/{CustomerModule.RouteSegment}";
 
     private WebApplicationFactory<Program> ConfiguredFactory =>
         applicationInMemoryFactory

@@ -42,7 +42,7 @@ internal static class CreateProductEndpoint
 
         var publicId = result.Value.Value;
         var urlPart = httpContext.GetUrlPart();
-        var basePath = ProductConventions.BuildApiBasePath(urlPart.Version);
+        var basePath = ProductModule.BuildApiBasePath(urlPart.Version);
         var location = $"{urlPart.Scheme}://{urlPart.Host}{basePath}/{publicId}";
 
         return Results.Created(location, publicId);

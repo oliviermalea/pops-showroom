@@ -8,7 +8,7 @@ namespace ShowRoom.Customer.Api.Modules;
 /// </summary>
 internal record class ModulesRegistry(string Value)
 {
-    internal static readonly ModulesRegistry Customer = new(CustomerConventions.ModuleName);
+    internal static readonly ModulesRegistry Customer = new(CustomerModule.ModuleName);
 
     public static implicit operator string(ModulesRegistry module) => module.Value;
 }

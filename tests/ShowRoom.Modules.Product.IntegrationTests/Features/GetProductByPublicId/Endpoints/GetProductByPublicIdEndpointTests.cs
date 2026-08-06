@@ -17,7 +17,7 @@ public class GetProductByPublicIdEndpointTests(
     : IClassFixture<ProductBusinessWebFactory>,
       IClassFixture<DatabaseContainer>
 {
-    private static readonly string ProductsRoute = $"/api/v1/{ProductConventions.RouteSegment}";
+    private static readonly string ProductsRoute = $"/api/v1/{ProductModule.RouteSegment}";
 
     private WebApplicationFactory<Program> ConfiguredFactory =>
         applicationInMemoryFactory

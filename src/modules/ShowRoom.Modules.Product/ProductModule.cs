@@ -1,35 +1,48 @@
+using System.Diagnostics;
+using Asp.Versioning;
+using FluentValidation;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using ShowRoom.BuildingBlocks;
+using ShowRoom.BuildingBlocks.Application;
+using ShowRoom.BuildingBlocks.Time;
 using ShowRoom.Modules.Product.Features.CreateProduct;
 using ShowRoom.Modules.Product.Features.GetProductByPublicId;
 using ShowRoom.Modules.Product.Features.GetProducts;
+using ShowRoom.Modules.Product.Persistence;
 
 namespace ShowRoom.Modules.Product;
 
 /// <summary>
-/// Composition root for the Product module. Wires Infrastructure + Application, exposes routing
-/// (behind a route group), and gates middleware behind the module feature flag. Database migration
-/// runs through the secured <c>UseInfrastructure -&gt; UseDatabase</c> pipeline (no ad-hoc startup call).
+/// Composition root and identity of the Product module: naming/routing conventions, its OpenTelemetry
+/// source, and the Add/Register/Map wiring. Infrastructure (EF, validators, time) is wired privately.
+/// This module has no machine-to-machine messaging.
 /// </summary>
 public static class ProductModule
 {
-    /// <summary>
-    /// OpenTelemetry source name for the Product module.
-    /// Register with <c>AddOpenTelemetry().WithTracing(t => t.AddSource(ProductModule.TelemetrySourceName))</c>.
-    /// </summary>
+    public const string ModuleName = "Product";
+    public const string Tag = ModuleName;
+    public const string RouteSegment = "products";
+    public const string BaseRoute = "/" + RouteSegment;
+
+    /// <summary>OpenTelemetry source name; register with <c>AddSource(ProductModule.TelemetrySourceName)</c>.</summary>
     public const string TelemetrySourceName = "ShowRoom.Modules.Product";
+
+    /// <summary>Module ActivitySource; feature handlers open their spans from here.</summary>
+    internal static readonly ActivitySource ActivitySource = new(TelemetrySourceName);
+
+    public static string BuildApiBasePath(ApiVersion? version)
+        => version is not null ? $"/api/v{version}{BaseRoute}" : $"/api{BaseRoute}";
 
     public static IHostApplicationBuilder AddProductModule(this IHostApplicationBuilder builder, string module)
     {
         ArgumentNullException.ThrowIfNull(builder);
 
-        // Services are always registered so routes and DI stay consistent;
-        // the feature flag controls routing and middleware only.
-        builder.AddInfrastructureModule();
-        builder.Services.AddApplicationModule();
+        builder.AddInfrastructure();
+        builder.Services.AddApplicationHandlersFromAssembly(typeof(ProductModule).Assembly);
 
         return builder;
     }
@@ -43,14 +56,14 @@ public static class ProductModule
             return;
         }
 
-        app.UseProductModule();
+        app.UseDatabase();
     }
 
     public static IEndpointRouteBuilder MapProductModule(this IEndpointRouteBuilder endpoints)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
-        var group = endpoints.CreateProductGroup();
+        var group = endpoints.MapGroup(BaseRoute).WithTags(Tag);
 
         // Public-facing product URLs always use PublicId values.
         group.MapCreateProduct();
@@ -60,11 +73,13 @@ public static class ProductModule
         return endpoints;
     }
 
-    private static IApplicationBuilder UseProductModule(this IApplicationBuilder applicationBuilder)
-        => applicationBuilder.UseInfrastructure();
+    private static void AddInfrastructure(this IHostApplicationBuilder builder)
+    {
+        builder.Services.AddDatabase(builder.Configuration);
 
-    private static RouteGroupBuilder CreateProductGroup(this IEndpointRouteBuilder endpoints)
-        => endpoints
-            .MapGroup(ProductConventions.BaseRoute)
-            .WithTags(ProductConventions.Tag);
+        builder.Services.AddSingleton(TimeProvider.System);
+        builder.Services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
+
+        builder.Services.AddValidatorsFromAssembly(typeof(ProductModule).Assembly, includeInternalTypes: true);
+    }
 }

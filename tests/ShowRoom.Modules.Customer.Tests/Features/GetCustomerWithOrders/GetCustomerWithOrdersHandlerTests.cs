@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using ShowRoom.BuildingBlocks.Domain.PublicIds;
 using ShowRoom.BuildingBlocks.Results;
 using ShowRoom.Modules.Customer.Features.GetCustomerWithOrders;
-using ShowRoom.Modules.Customer.Messaging;
+using ShowRoom.Modules.Customer.Features.GetCustomerWithOrders;
 using ShowRoom.Modules.Customer.Persistence;
 using ShowRoom.Modules.Order.Contracts.Messaging;
 using ShowRoom.SharedKernel.Emails;

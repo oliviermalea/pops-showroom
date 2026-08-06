@@ -8,7 +8,6 @@ using ShowRoom.BuildingBlocks.Observability.Logging;
 using ShowRoom.BuildingBlocks.Observability.Tracing;
 using ShowRoom.BuildingBlocks.Results;
 using ShowRoom.BuildingBlocks.Time;
-using ShowRoom.Modules.Product.Observability;
 using ShowRoom.Modules.Product.Persistence;
 using ProductAggregate = ShowRoom.Modules.Product.Domain.Product;
 
@@ -27,11 +26,11 @@ internal sealed class CreateProductCommandHandler(
     {
         var requestId = Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N");
 
-        using var scope = logger.BeginModuleScope(ProductConventions.ModuleName, FeatureName, requestId);
-        using var activity = ProductTelemetry.ActivitySource.StartActivity("product.create_product");
+        using var scope = logger.BeginModuleScope(ProductModule.ModuleName, FeatureName, requestId);
+        using var activity = ProductModule.ActivitySource.StartActivity("product.create_product");
 
         activity?
-            .SetCommonTags(ProductConventions.ModuleName, FeatureName, requestId)
+            .SetCommonTags(ProductModule.ModuleName, FeatureName, requestId)
             .SetTag("product.name", command.Name)
             .SetTag("product.price", command.Price);
 

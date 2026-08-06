@@ -122,17 +122,21 @@ Implementation notes for this repo:
 
 ---
 
-### 1.7 Module composition (mandatory)
-Each module is composed through a fixed set of root-level types (namespace `ShowRoom.Modules.<Module>`, NOT a layer), following the established module pattern (see the Customer / Order / Product modules):
-- **`<Module>Conventions`** — constants only: `ModuleName`, `Tag`, `RouteSegment`, `BaseRoute` (`"/" + RouteSegment`), `ConnectionName`, and `BuildApiBasePath(ApiVersion?)`.
-- **`<Module>Module`** — composition root exposing:
-  - `Add<Module>Module(IHostApplicationBuilder, string module)` → delegates to `AddInfrastructureModule()` + `AddApplicationModule()`. Services are ALWAYS registered so DI and routes stay consistent; the feature flag gates routing/middleware only.
-  - `Register<Module>Module(WebApplication, string module)` → gates on `IsModuleEnabled(module)`, then `Use<Module>Module()` (module middleware).
-  - `Map<Module>Module(IEndpointRouteBuilder)` → creates a route group `MapGroup(BaseRoute).WithTags(Tag)` and maps each feature endpoint on the group; feature endpoints map only their sub-path (e.g. `/{publicId}`).
-  - `TelemetrySourceName` constant.
-- **`ApplicationModule`** — `AddApplicationModule()` → `AddApplicationHandlersFromAssembly(assembly)`.
-- **`InfrastructureModule`** — `AddInfrastructureModule()` (DbContext, `IDateTimeProvider`, `AddValidators()`) + `UseInfrastructure()`.
-- **`ValidatorInstaller`** — `AddValidators()` → `AddValidatorsFromAssembly(includeInternalTypes: true)`.
+### 1.7 Module organization (mandatory)
+A module is organized by **DDD + VSA** — NO purely technical folders (no `Observability/`, no `Messaging/` bucket), NO scattered composition classes at the module root. The folders are exactly: `Domain/`, `Features/`, `Persistence/`, plus a single composition file.
+
+- **`<Module>Module.cs`** — the ONLY root-level file: the composition root AND the module's identity. It holds:
+  - the naming/routing constants (`ModuleName`, `Tag`, `RouteSegment`, `BaseRoute` = `"/" + RouteSegment`, `TelemetrySourceName`) and `BuildApiBasePath(ApiVersion?)`;
+  - the module `ActivitySource`: `internal static readonly ActivitySource ActivitySource = new(TelemetrySourceName)`;
+  - `Add<Module>Module(IHostApplicationBuilder, string)` → a private `AddInfrastructure()` (DbContext via `Persistence.AddDatabase`, messaging discovery — see §3.4, `TimeProvider`/`IDateTimeProvider`, `AddValidatorsFromAssembly(includeInternalTypes: true)`) + `AddApplicationHandlersFromAssembly(typeof(<Module>Module).Assembly)`. Services are ALWAYS registered; the feature flag gates routing/middleware only.
+  - `Register<Module>Module(WebApplication, string)` → gates on `IsModuleEnabled`, then `UseDatabase()` (migration pipeline);
+  - `Map<Module>Module(IEndpointRouteBuilder)` → `MapGroup(BaseRoute).WithTags(Tag)` + each feature endpoint's sub-path (e.g. `/{publicId}`).
+- **`Domain/`** — DDD core (aggregate, entities, value objects, ids, errors, domain events).
+- **`Features/<Slice>/`** — one folder per vertical slice, fully self-contained: Request/Command/Query, Endpoint, Handler, Response, Assembler, Validator, AND the slice's messaging (message handler + its `IWolverineExtension` routing + any ACL gateway — see §3.4).
+- **`Persistence/`** — the module's data mechanics (DbContext, `DatabaseModule` = `AddDatabase`/`UseDatabase`, EF `Configurations/`, `Migrations/`, design-time factory).
+- `InternalsVisibleTo` for the module's test assemblies lives in the `.csproj` (`<InternalsVisibleTo Include="..." />`), NOT an `AssemblyInfo.cs`.
+
+Do NOT reintroduce `Observability/`, `Messaging/`, `ApplicationModule`, `InfrastructureModule`, `ValidatorInstaller`, `<Module>Conventions`, or `<Module>Telemetry`: conventions/telemetry/wiring fold into `<Module>Module.cs`; messaging folds into the relevant slice. Feature handlers reference `<Module>Module.ModuleName` and open spans from `<Module>Module.ActivitySource`.
 
 Feature-flag gating: module enablement is read from `FeatureManagement:<ModuleName>` via `IsModuleEnabled` (BuildingBlocks). The host keeps a `ModulesRegistry` (record with `implicit operator string`) and wires `Add<Module>Module` (always — services/routes stay consistent) and `Map<Module>Module` (always). Only `Register<Module>Module` (module middleware) is gated by `IsModuleEnabled`. Do NOT gate `Map` on `builder.Configuration` before `Build()` — under `WebApplicationFactory` the flag is not reliably present at that point, which breaks endpoint tests.
 
@@ -192,7 +196,7 @@ Each backend feature must include:
 ### 2.5 Handler observability standard (mandatory)
 - Apply a single, consistent handler style for observability and reliability across **every** handler — command handlers, query handlers, AND Wolverine message handlers.
 - Every handler must derive a `requestId` from the ambient trace (`Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N")`) and propagate it in the log scope (`BeginModuleScope(module, feature, requestId)`).
-- Every handler must **open its own span** from the module's `ActivitySource` (`using var activity = <Module>Telemetry.ActivitySource.StartActivity("<module>.<snake_case_feature>");`) and enrich it with `SetCommonTags(module, feature, requestId)` + feature-specific business tags. The module `ActivitySource` name must be registered with OpenTelemetry (`AddSource`) in the hosting service.
+- Every handler must **open its own span** from the module's `ActivitySource` (`using var activity = <Module>Module.ActivitySource.StartActivity("<module>.<snake_case_feature>");`) and enrich it with `SetCommonTags(module, feature, requestId)` + feature-specific business tags. The module `ActivitySource` name (`<Module>Module.TelemetrySourceName`) must be registered with OpenTelemetry (`AddSource`) in the hosting service.
 - Every failure branch must mark the span (`activity?.SetStatus(ActivityStatusCode.Error, "<reason>")`); the success path adds result tags (e.g. the created `public_id`, result counts).
 - Use explicit `LogInformation`/`LogWarning` messages for start, validation failures, domain failures, and success.
 - For create endpoints returning a new resource identifier, the command handler response must be `Result<PublicId>` containing the created `PublicId` (serialised as its string value over HTTP); never expose the technical id.
@@ -222,11 +226,12 @@ Before implementation, define:
 Cross-module (and future cross-service) data exchange goes over **RabbitMQ via Wolverine**, never HTTP.
 
 - **Contract placement:** request/reply message types live in the owning module's `*.Contracts` assembly (pure records, no `Domain/Features/Persistence` or messaging-framework dependency). Consumers reference only the `*.Contracts` assembly of the module they call.
-- **Consumer side (data owner):** the owning module implements a Wolverine message handler (`public Task<TResponse> Handle(TRequest, <deps>, CancellationToken)`) that answers from its own `DbContext`. Wolverine discovery is explicit (`opts.Discovery.DisableConventionalDiscovery().IncludeType<THandler>()`) so the modules' REPR `IQueryHandler`/`ICommandHandler` types are never scanned as message handlers.
+- **Consumer side (data owner):** the owning module implements a Wolverine message handler (`public Task<TResponse> Handle(TRequest, <deps>, CancellationToken)`) in the matching `Features/<Slice>/` folder, answering from its own `DbContext`. That same slice declares its routing as an `IWolverineExtension` co-located with the handler (`opts.ListenToRabbitQueue(...)` + `opts.Discovery.IncludeType<THandler>()`); the core `ConfigureShowRoomMessaging` calls `DisableConventionalDiscovery()` so the modules' REPR `IQueryHandler`/`ICommandHandler` types are never scanned as message handlers.
 - **Caller side:** wrap `IMessageBus.InvokeAsync<TResponse>(request)` behind a small anti-corruption gateway interface in the caller module (do not inject `IMessageBus` directly into a feature handler — keeps the handler unit-testable). The feature handler orchestrates the gateway.
-- **Force the broker:** even while modules share one process (modulith), configure `opts.Policies.DisableConventionalLocalRouting()` + explicit `PublishMessage<T>().ToRabbitQueue(...)` + `ListenToRabbitQueue(...)` so the request genuinely transits RabbitMQ. This is the seam that lets a module later be extracted into its own service with no contract change.
+- **Standard message headers (MANDATORY):** every message sent on the bus MUST carry the standard headers defined in `ShowRoom.BuildingBlocks.Messaging.MessageHeaders` — at minimum `ModuleName`, `FeatureName`, `MessageType`, `MessageId`, `CorrelationId`, `TraceId` (add `CausationId`, `EventType`, `TenantId`, `UserId` when the context provides them). **Producers** set them via `new DeliveryOptions().WithHeader(MessageHeaders.<Key>, value)` passed to `InvokeAsync`/`PublishAsync` (correlation/trace id derived from `Activity.Current?.TraceId`). **Consumers** inject the Wolverine `Envelope` and read `envelope.Headers[MessageHeaders.<Key>]` to derive the correlation id (used for `BeginModuleScope`) and to enrich the span with caller module/feature. **Never** hardcode header key strings — always reference the `MessageHeaders` constants.
+- **Configuration is config-driven and per-module (like persistence) — MANDATORY:** the transport is configured ONCE centrally via `opts.ConfigureShowRoomMessaging(configuration)` (`ShowRoom.BuildingBlocks.Messaging`) inside the host's `UseWolverine`, reading `MessagingOptions` from the `"Messaging"` section (`Enabled`, `Transport` = `InMemory`/`RabbitMq`, `RabbitMqConnectionName`, `UseDurableLocalQueues`, `EnableRemoteInvocation`). Each feature **slice** owns its routing as an `IWolverineExtension` co-located in `Features/<Slice>/`; the module composition discovers them with a Scrutor scan in `<Module>Module.AddInfrastructure` (`services.Scan(... AssignableTo<IWolverineExtension>() ... AsSingleton)`), gated by `Messaging:Enabled`. Wolverine applies those extensions automatically at bootstrap, so the host stays agnostic of module specifics. Producers declare `PublishMessage<T>().ToRabbitQueue(...)`; consumers `ListenToRabbitQueue(...)` — in the slice's `IWolverineExtension`. Extracting a module to its own service is then a deployment change, not a contract change.
 - **Reactive degradation:** read/query paths must degrade gracefully when the broker/remote module is unavailable or times out (Wolverine's default 5s remote-invocation timeout) — return a partial result with an availability flag rather than failing the whole request. Write paths choose an explicit failure or outbox strategy.
-- **Connection:** RabbitMQ is an Aspire resource (`AddRabbitMQ("messaging")`); the app reads it via `opts.UseRabbitMqUsingNamedConnection("messaging").AutoProvision()`.
+- **Connection:** RabbitMQ is an Aspire resource (`AddRabbitMQ("messaging")`); `ConfigureShowRoomMessaging` connects via `UseRabbitMqUsingNamedConnection(MessagingOptions.RabbitMqConnectionName).AutoProvision()` when `Transport == RabbitMq`.
 - **Tests:** stub external transports by default in the shared test harness (`services.DisableAllExternalWolverineTransports()`); prove behaviour with unit tests over the gateway abstraction (happy + degraded paths), and prove the real round-trip with one dedicated end-to-end test backed by a RabbitMQ Testcontainer.
 
 ---

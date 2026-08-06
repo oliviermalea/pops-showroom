@@ -8,7 +8,6 @@ using ShowRoom.BuildingBlocks.Observability.Logging;
 using ShowRoom.BuildingBlocks.Observability.Tracing;
 using ShowRoom.BuildingBlocks.Results;
 using ShowRoom.BuildingBlocks.Time;
-using ShowRoom.Modules.Order.Observability;
 using ShowRoom.Modules.Order.Persistence;
 using OrderAggregate = ShowRoom.Modules.Order.Domain.Order;
 
@@ -27,11 +26,11 @@ internal sealed class CreateOrderCommandHandler(
     {
         var requestId = Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N");
 
-        using var scope = logger.BeginModuleScope(OrderConventions.ModuleName, FeatureName, requestId);
-        using var activity = OrderTelemetry.ActivitySource.StartActivity("order.create_order");
+        using var scope = logger.BeginModuleScope(OrderModule.ModuleName, FeatureName, requestId);
+        using var activity = OrderModule.ActivitySource.StartActivity("order.create_order");
 
         activity?
-            .SetCommonTags(OrderConventions.ModuleName, FeatureName, requestId)
+            .SetCommonTags(OrderModule.ModuleName, FeatureName, requestId)
             .SetTag("order.customer.public_id", command.CustomerPublicId)
             .SetTag("order.line_count", command.Lines.Count);
 

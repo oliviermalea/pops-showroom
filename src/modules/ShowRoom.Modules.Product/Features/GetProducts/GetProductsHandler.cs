@@ -6,7 +6,6 @@ using ShowRoom.BuildingBlocks.Application.Pagination;
 using ShowRoom.BuildingBlocks.Observability.Logging;
 using ShowRoom.BuildingBlocks.Observability.Tracing;
 using ShowRoom.BuildingBlocks.Results;
-using ShowRoom.Modules.Product.Observability;
 using ShowRoom.Modules.Product.Persistence;
 
 namespace ShowRoom.Modules.Product.Features.GetProducts;
@@ -26,13 +25,13 @@ internal sealed class GetProductsHandler(
     {
         var requestId = Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N");
 
-        using var scope = logger.BeginModuleScope(ProductConventions.ModuleName, FeatureName, requestId);
-        using var activity = ProductTelemetry.ActivitySource.StartActivity("product.get_products");
+        using var scope = logger.BeginModuleScope(ProductModule.ModuleName, FeatureName, requestId);
+        using var activity = ProductModule.ActivitySource.StartActivity("product.get_products");
 
         var (page, pageSize) = NormalizePagination(query.Page, query.PageSize);
 
         activity?
-            .SetCommonTags(ProductConventions.ModuleName, FeatureName, requestId)
+            .SetCommonTags(ProductModule.ModuleName, FeatureName, requestId)
             .SetTag("product.page", page)
             .SetTag("product.page_size", pageSize)
             .SetTag("product.has_search", !string.IsNullOrWhiteSpace(query.Search));

@@ -17,7 +17,7 @@ public class GetOrderByPublicIdEndpointTests(
     : IClassFixture<OrderBusinessWebFactory>,
       IClassFixture<DatabaseContainer>
 {
-    private static readonly string OrdersRoute = $"/api/v1/{OrderConventions.RouteSegment}";
+    private static readonly string OrdersRoute = $"/api/v1/{OrderModule.RouteSegment}";
 
     private WebApplicationFactory<Program> ConfiguredFactory =>
         applicationInMemoryFactory

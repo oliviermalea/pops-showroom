@@ -6,7 +6,6 @@ using ShowRoom.BuildingBlocks.Observability.Logging;
 using ShowRoom.BuildingBlocks.Observability.Tracing;
 using ShowRoom.BuildingBlocks.Results;
 using ShowRoom.Modules.Product.Domain;
-using ShowRoom.Modules.Product.Observability;
 using ShowRoom.Modules.Product.Persistence;
 
 namespace ShowRoom.Modules.Product.Features.GetProductByPublicId;
@@ -24,12 +23,12 @@ public sealed class GetProductByPublicIdHandler(
     {
         var requestId = Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N");
 
-        using var scope = logger.BeginModuleScope(ProductConventions.ModuleName, FeatureName, requestId);
-        using var activity = ProductTelemetry.ActivitySource.StartActivity("product.get_product_by_public_id");
+        using var scope = logger.BeginModuleScope(ProductModule.ModuleName, FeatureName, requestId);
+        using var activity = ProductModule.ActivitySource.StartActivity("product.get_product_by_public_id");
 
         var publicId = query.PublicId;
         activity?
-            .SetCommonTags(ProductConventions.ModuleName, FeatureName, requestId)
+            .SetCommonTags(ProductModule.ModuleName, FeatureName, requestId)
             .SetTag("product.public_id", publicId.Value);
 
         logger.LogInformation("Fetching product by public id {PublicId}", publicId.Value);
