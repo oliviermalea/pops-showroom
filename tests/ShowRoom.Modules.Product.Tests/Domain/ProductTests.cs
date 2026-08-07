@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using ShowRoom.Modules.Product.Domain;
+using ShowRoom.SharedKernel.Currencies;
 using Xunit;
 using ProductAggregate = ShowRoom.Modules.Product.Domain.Product;
 
@@ -22,7 +23,7 @@ public sealed class ProductTests
         sut.Value.Name.Should().Be("Surf des mers");
         sut.Value.Description.Should().Be("Une planche légendaire");
         sut.Value.Price.Should().Be(349.90m);
-        sut.Value.Currency.Should().Be("EUR");
+        sut.Value.Currency.Value.Should().Be("EUR");
         sut.Value.Status.Should().Be(ProductStatus.Available);
         sut.Value.CreatedAt.Should().Be(createdAt);
         sut.Value.UpdatedAt.Should().BeNull();
@@ -34,7 +35,7 @@ public sealed class ProductTests
         var sut = ProductAggregate.Create("Kayak", description: null, 10m, currency: null, DateTimeOffset.UtcNow);
 
         sut.IsSuccess.Should().BeTrue();
-        sut.Value.Currency.Should().Be(ProductAggregate.DefaultCurrency);
+        sut.Value.Currency.Should().Be(Currency.Default);
         sut.Value.Description.Should().BeNull();
     }
 

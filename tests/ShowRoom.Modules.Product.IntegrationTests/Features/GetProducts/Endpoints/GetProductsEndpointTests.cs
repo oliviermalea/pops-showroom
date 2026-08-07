@@ -45,7 +45,7 @@ public class GetProductsEndpointTests(
 
         // Act
         HttpResponseMessage sut = await client.GetAsync(
-            $"{ProductsRoute}?search=Planche {tag}&page=1&pageSize=2",
+            $"{ProductsRoute}?page=1&pageSize=2",
             cancellationToken);
 
         // Assert
@@ -55,24 +55,28 @@ public class GetProductsEndpointTests(
         body.Should().NotBeNull();
         body!.PageSize.Should().Be(2);
         body.Products.Should().HaveCount(2);
-        body.TotalItems.Should().Be(3);
-        body.TotalPages.Should().Be(2);
+        body.TotalItems.Should().BeGreaterThanOrEqualTo(3);
+        body.Page.Should().Be(1);
     }
 
     [Fact]
-    public async Task Should_Filter_By_Name_Search_Case_Insensitively()
+    public async Task Should_Filter_By_Product_PublicId()
     {
         // Arrange
         var cancellationToken = CancellationToken.None;
         var client = ConfiguredFactory.CreateClient();
         var unique = Guid.NewGuid().ToString("N")[..8];
 
-        await client.PostAsJsonAsync(ProductsRoute, ProductNamed($"Kayak-{unique}"), cancellationToken);
+        var createResponse = await client.PostAsJsonAsync(
+            ProductsRoute, ProductNamed($"Kayak-{unique}"), cancellationToken);
         await client.PostAsJsonAsync(ProductsRoute, ProductNamed($"Voile-{unique}"), cancellationToken);
 
-        // Act (lower-case search must still match the capitalised name via ILike)
+        var publicId = await createResponse.Content.ReadFromJsonAsync<string>(cancellationToken);
+        publicId.Should().NotBeNullOrWhiteSpace();
+
+        // Act
         HttpResponseMessage sut = await client.GetAsync(
-            $"{ProductsRoute}?search=kayak-{unique}",
+            $"{ProductsRoute}?publicId={publicId}",
             cancellationToken);
 
         // Assert
@@ -81,6 +85,17 @@ public class GetProductsEndpointTests(
         var body = await sut.Content.ReadFromJsonAsync<GetProductsResponse>(cancellationToken);
         body.Should().NotBeNull();
         body!.Products.Should().ContainSingle();
+        body.Products.Single().PublicId.Value.Should().Be(publicId);
         body.Products.Single().Name.Should().Be($"Kayak-{unique}");
+        body.TotalItems.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Should_Return_BadRequest_For_Malformed_PublicId_Filter()
+    {
+        HttpResponseMessage sut = await ConfiguredFactory.CreateClient()
+            .GetAsync($"{ProductsRoute}?publicId=not-a-public-id", CancellationToken.None);
+
+        sut.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 }

@@ -11,7 +11,7 @@ public static class GetProductByPublicIdAssembler
             Name: product.Name,
             Description: product.Description,
             Price: product.Price,
-            Currency: product.Currency,
+            Currency: product.Currency.Value,
             Status: product.Status.Value,
             CreatedAt: product.CreatedAt,
             UpdatedAt: product.UpdatedAt);

@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using ShowRoom.BuildingBlocks.Domain.PublicIds;
 using ShowRoom.Modules.Product.Domain;
 using ShowRoom.Modules.Product.Features.GetProductByPublicId;
+using ShowRoom.SharedKernel.Currencies;
 using Xunit;
 using ProductAggregate = ShowRoom.Modules.Product.Domain.Product;
 
@@ -23,7 +24,7 @@ public sealed class GetProductByPublicIdAssemblerTests
             "Surf des mers",
             "Une planche légendaire",
             349.90m,
-            "EUR",
+            Currency.Create("EUR").Value,
             ProductStatus.Discontinued,
             createdAt,
             updatedAt);

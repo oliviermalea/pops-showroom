@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using ShowRoom.BuildingBlocks.Domain.PublicIds;
 using ShowRoom.Modules.Order.Domain;
+using ShowRoom.SharedKernel.Currencies;
 using Xunit;
 using OrderAggregate = ShowRoom.Modules.Order.Domain.Order;
 
@@ -29,7 +30,7 @@ public sealed class OrderTests
         sut.Value.Status.Should().Be(OrderStatus.Pending);
         sut.Value.PublicId.Prefix.Should().Be("ord");
         sut.Value.CustomerPublicId.Should().Be(customerPublicId);
-        sut.Value.Currency.Should().Be("EUR");
+        sut.Value.Currency.Value.Should().Be("EUR");
         sut.Value.Lines.Should().HaveCount(2);
         sut.Value.TotalAmount.Should().Be(25.5m);
     }
@@ -40,7 +41,7 @@ public sealed class OrderTests
         var sut = OrderAggregate.Create(NewCustomerId(), currency: null, new[] { Line() }, DateTimeOffset.UtcNow);
 
         sut.IsSuccess.Should().BeTrue();
-        sut.Value.Currency.Should().Be(OrderAggregate.DefaultCurrency);
+        sut.Value.Currency.Should().Be(Currency.Default);
     }
 
     [Fact]

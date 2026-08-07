@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using ShowRoom.BuildingBlocks.Application;
 using ShowRoom.BuildingBlocks.Application.Pagination;
+using ShowRoom.BuildingBlocks.Domain.PublicIds;
 using ShowRoom.BuildingBlocks.Observability.Logging;
 using ShowRoom.BuildingBlocks.Observability.Tracing;
 using ShowRoom.BuildingBlocks.Results;
@@ -34,21 +35,29 @@ internal sealed class GetProductsHandler(
             .SetCommonTags(ProductModule.ModuleName, FeatureName, requestId)
             .SetTag("product.page", page)
             .SetTag("product.page_size", pageSize)
-            .SetTag("product.has_search", !string.IsNullOrWhiteSpace(query.Search));
+            .SetTag("product.has_public_id_filter", !string.IsNullOrWhiteSpace(query.PublicId));
 
         var productsQuery = context.Products.AsNoTracking();
 
-        if (!string.IsNullOrWhiteSpace(query.Search))
+        if (!string.IsNullOrWhiteSpace(query.PublicId))
         {
-            var pattern = $"%{query.Search.Trim()}%";
-            productsQuery = productsQuery.Where(product => EF.Functions.ILike(product.Name, pattern));
+            if (!PublicId.TryParse(query.PublicId, out var publicId))
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, "Malformed product public id filter");
+                logger.LogWarning("Rejecting product listing with malformed product public id filter");
+                return Error.Validation(
+                    "Product.InvalidPublicIdFilter",
+                    "The product public id filter is not a valid public id.");
+            }
+
+            productsQuery = productsQuery.Where(product => product.PublicId == publicId!);
         }
 
         logger.LogInformation(
-            "Listing products page {Page} size {PageSize} (search: {HasSearch})",
+            "Listing products page {Page} size {PageSize} (public id filter: {HasFilter})",
             page,
             pageSize,
-            !string.IsNullOrWhiteSpace(query.Search));
+            !string.IsNullOrWhiteSpace(query.PublicId));
 
         var ordered = productsQuery.OrderByDescending(product => product.CreatedAt);
 

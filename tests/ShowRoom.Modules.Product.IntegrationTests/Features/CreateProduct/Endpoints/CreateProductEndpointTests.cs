@@ -2,6 +2,7 @@ namespace ShowRoom.Modules.Product.IntegrationTests.Features.CreateProduct.Endpo
 
 using System.Net;
 using System.Net.Http.Json;
+using System.Text;
 using AwesomeAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using ShowRoom.Modules.Product;
@@ -73,5 +74,32 @@ public class CreateProductEndpointTests(
             .PostAsJsonAsync(ProductsRoute, command, CancellationToken.None);
 
         sut.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Should_Return_BadRequest_When_Currency_Is_Not_A_Supported_Iso_Code()
+    {
+        var command = NewProductCommand() with { Currency = "Eur" };
+
+        HttpResponseMessage sut = await ConfiguredFactory.CreateClient()
+            .PostAsJsonAsync(ProductsRoute, command, CancellationToken.None);
+
+        sut.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Should_Return_Clean_ProblemDetails_400_For_Malformed_Json_Body()
+    {
+        // Arrange — 'Eur' is not quoted, so the body is not valid JSON and fails to deserialize.
+        const string malformedJson = """{ "name": "Planche", "price": 129.00, "currency": Eur }""";
+        using var content = new StringContent(malformedJson, Encoding.UTF8, "application/json");
+
+        // Act
+        HttpResponseMessage sut = await ConfiguredFactory.CreateClient()
+            .PostAsync(ProductsRoute, content, CancellationToken.None);
+
+        // Assert — a uniform RFC 7807 ProblemDetails 400, never a raw stack trace.
+        sut.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        sut.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
     }
 }

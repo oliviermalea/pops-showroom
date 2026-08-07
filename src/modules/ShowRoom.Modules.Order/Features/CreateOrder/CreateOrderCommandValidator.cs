@@ -1,4 +1,5 @@
 using FluentValidation;
+using ShowRoom.BuildingBlocks.Application.Validations;
 using ShowRoom.BuildingBlocks.Domain.PublicIds;
 
 namespace ShowRoom.Modules.Order.Features.CreateOrder;
@@ -12,7 +13,7 @@ internal sealed class CreateOrderCommandValidator : AbstractValidator<CreateOrde
             .Must(PublicId.IsValid).WithMessage("Customer public id is not a valid public id.");
 
         RuleFor(x => x.Currency)
-            .Length(3).WithMessage("Currency must be a 3-letter ISO code.")
+            .MustBeSupportedCurrency()
             .When(x => !string.IsNullOrWhiteSpace(x.Currency));
 
         RuleFor(x => x.Lines)

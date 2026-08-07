@@ -26,7 +26,7 @@ builder.AddProject<Projects.ShowRoom_Business_Api>("showroom-business-api")
     .WaitFor(businessDb)
     .WithReference(messaging)
     .WaitFor(messaging)
-    .WithScalar();
+    .WithScalarUrl();
 
 // Customer service — PRODUCES the Order query over the bus (GetCustomerWithOrders).
 builder.AddProject<Projects.ShowRoom_Customer_Api>("showroom-customer-api")
@@ -36,6 +36,6 @@ builder.AddProject<Projects.ShowRoom_Customer_Api>("showroom-customer-api")
     .WaitFor(customerDb)
     .WithReference(messaging)
     .WaitFor(messaging)
-    .WithScalar();
+    .WithScalarUrl();
 
 builder.Build().Run();

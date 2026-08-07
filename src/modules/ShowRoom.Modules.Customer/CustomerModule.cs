@@ -13,6 +13,7 @@ using ShowRoom.BuildingBlocks.Messaging;
 using ShowRoom.BuildingBlocks.Time;
 using ShowRoom.Modules.Customer.Features.CreateCustomer;
 using ShowRoom.Modules.Customer.Features.GetCustomerByPublicId;
+using ShowRoom.Modules.Customer.Features.GetCustomers;
 using ShowRoom.Modules.Customer.Features.GetCustomerWithOrders;
 using ShowRoom.Modules.Customer.Persistence;
 using Wolverine;
@@ -71,6 +72,7 @@ public static class CustomerModule
 
         // Public-facing customer URLs always use PublicId values.
         group.MapCreateCustomer();
+        group.MapGetCustomers();
         group.MapGetCustomerWithOrders();
         group.MapGetCustomerByPublicId();
 

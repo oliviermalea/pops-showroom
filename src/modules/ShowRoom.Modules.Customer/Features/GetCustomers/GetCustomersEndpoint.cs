@@ -5,34 +5,34 @@ using ShowRoom.BuildingBlocks.Application;
 using ShowRoom.BuildingBlocks.Http.Errors;
 using ShowRoom.BuildingBlocks.Results;
 
-namespace ShowRoom.Modules.Product.Features.GetProducts;
+namespace ShowRoom.Modules.Customer.Features.GetCustomers;
 
 /// <summary>
-/// Minimal API endpoint (REPR): <c>GET /products</c>. Returns a paginated list of product summaries,
-/// optionally filtered to a single product by its public id via <c>?publicId=</c>.
+/// Minimal API endpoint (REPR): <c>GET /customers</c>. Returns a paginated list of customer summaries,
+/// optionally filtered by a free-text search over the name via <c>?search=</c>.
 /// </summary>
-internal static class GetProductsEndpoint
+internal static class GetCustomersEndpoint
 {
-    internal static IEndpointRouteBuilder MapGetProducts(this IEndpointRouteBuilder endpoints)
+    internal static IEndpointRouteBuilder MapGetCustomers(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapGet("/", HandleAsync)
-            .WithName("GetProducts")
-            .WithSummary("Lists products (paginated), optionally filtered by product public id.")
-            .Produces<GetProductsResponse>(StatusCodes.Status200OK)
+            .WithName("GetCustomers")
+            .WithSummary("Lists customers (paginated), optionally filtered by a name search.")
+            .Produces<GetCustomersResponse>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status400BadRequest);
 
         return endpoints;
     }
 
     private static async Task<IResult> HandleAsync(
-        IQueryHandler<GetProductsQuery, Result<GetProductsResponse>> handler,
+        IQueryHandler<GetCustomersQuery, Result<GetCustomersResponse>> handler,
         int page = 1,
         int pageSize = 20,
-        string? publicId = null,
+        string? search = null,
         CancellationToken cancellationToken = default)
     {
         var result = await handler.HandleAsync(
-            new GetProductsQuery(page, pageSize, publicId),
+            new GetCustomersQuery(page, pageSize, search),
             cancellationToken);
 
         return result.IsSuccess

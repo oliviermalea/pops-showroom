@@ -1,4 +1,5 @@
 using FluentValidation;
+using ShowRoom.BuildingBlocks.Application.Validations;
 
 namespace ShowRoom.Modules.Product.Features.CreateProduct;
 
@@ -18,7 +19,7 @@ internal sealed class CreateProductCommandValidator : AbstractValidator<CreatePr
             .GreaterThanOrEqualTo(0).WithMessage("Price must be non-negative.");
 
         RuleFor(x => x.Currency)
-            .Length(3).WithMessage("Currency must be a 3-letter ISO code.")
+            .MustBeSupportedCurrency()
             .When(x => !string.IsNullOrWhiteSpace(x.Currency));
     }
 }

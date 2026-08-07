@@ -10,7 +10,7 @@ public static class GetProductsAssembler
             PublicId: product.PublicId,
             Name: product.Name,
             Price: product.Price,
-            Currency: product.Currency,
+            Currency: product.Currency.Value,
             Status: product.Status.Value,
             CreatedAt: product.CreatedAt);
 }

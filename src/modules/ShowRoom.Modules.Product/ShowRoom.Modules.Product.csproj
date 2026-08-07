@@ -18,6 +18,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\..\buildingblocks\ShowRoom.BuildingBlocks\ShowRoom.BuildingBlocks.csproj" />
+		<ProjectReference Include="..\..\sharedkernel\ShowRoom.SharedKernel\ShowRoom.SharedKernel.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

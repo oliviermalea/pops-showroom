@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using ShowRoom.BuildingBlocks.Domain.PublicIds;
 using ShowRoom.Modules.Order.Domain;
+using ShowRoom.SharedKernel.Currencies;
 using OrderAggregate = ShowRoom.Modules.Order.Domain.Order;
 
 namespace ShowRoom.Modules.Order.Persistence.Configurations;
@@ -36,7 +37,10 @@ internal sealed class OrderConfiguration : IEntityTypeConfiguration<OrderAggrega
             .IsRequired();
         builder.HasIndex(order => order.CustomerPublicId);
 
-        builder.Property(order => order.Currency).HasMaxLength(3).IsRequired();
+        builder.Property(order => order.Currency)
+            .HasConversion(currency => currency.Value, value => Currency.Create(value).Value)
+            .HasMaxLength(3)
+            .IsRequired();
 
         builder.Property(order => order.Status)
             .HasConversion(status => status.Value, value => OrderStatus.FromValue(value))

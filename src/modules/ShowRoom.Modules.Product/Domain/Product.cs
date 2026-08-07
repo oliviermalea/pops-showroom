@@ -2,6 +2,7 @@ using ShowRoom.BuildingBlocks.Domain.Abstractions;
 using ShowRoom.BuildingBlocks.Domain.Primitives;
 using ShowRoom.BuildingBlocks.Domain.PublicIds;
 using ShowRoom.BuildingBlocks.Results;
+using ShowRoom.SharedKernel.Currencies;
 
 namespace ShowRoom.Modules.Product.Domain;
 
@@ -13,8 +14,6 @@ namespace ShowRoom.Modules.Product.Domain;
 /// </summary>
 public sealed class Product : AggregateRootWithPublicId<ProductId>, IAuditable
 {
-    public const string DefaultCurrency = "EUR";
-
     private Product(ProductId id)
         : base() => Id = id;
 
@@ -24,7 +23,7 @@ public sealed class Product : AggregateRootWithPublicId<ProductId>, IAuditable
         string name,
         string? description,
         decimal price,
-        string currency,
+        Currency currency,
         ProductStatus status,
         DateTimeOffset createdAt,
         DateTimeOffset? updatedAt)
@@ -48,7 +47,7 @@ public sealed class Product : AggregateRootWithPublicId<ProductId>, IAuditable
 
     public decimal Price { get; private set; }
 
-    public string Currency { get; private set; } = DefaultCurrency;
+    public Currency Currency { get; private set; } = Currency.Default;
 
     public ProductStatus Status { get; private set; } = ProductStatus.Available;
 
@@ -77,13 +76,19 @@ public sealed class Product : AggregateRootWithPublicId<ProductId>, IAuditable
             return ProductErrors.InvalidPrice;
         }
 
+        var currencyResult = Currency.CreateOrDefault(currency);
+        if (currencyResult.IsFailure)
+        {
+            return Result<Product>.Fail(currencyResult.Errors);
+        }
+
         return Result<Product>.Success(new Product(
             ProductId.FromGuid(Guid.CreateVersion7()),
             PublicIdFactory.ForProduct().Value,
             name.Trim(),
             string.IsNullOrWhiteSpace(description) ? null : description.Trim(),
             price,
-            string.IsNullOrWhiteSpace(currency) ? DefaultCurrency : currency.Trim().ToUpperInvariant(),
+            currencyResult.Value,
             ProductStatus.Available,
             createdAt,
             updatedAt: null));
@@ -96,7 +101,7 @@ public sealed class Product : AggregateRootWithPublicId<ProductId>, IAuditable
         string name,
         string? description,
         decimal price,
-        string currency,
+        Currency currency,
         ProductStatus status,
         DateTimeOffset createdAt,
         DateTimeOffset? updatedAt)

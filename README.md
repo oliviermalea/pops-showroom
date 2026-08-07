@@ -83,7 +83,8 @@ flowchart LR
 | Observabilité | OpenTelemetry (traces + métriques, export OTLP), Serilog (logs structurés) |
 | Identifiants | `StronglyTypedId` (Meziantou) en interne, `PublicId` (`prefix_guid`) exposé en HTTP |
 | Résultats | `Result`/`Error` + `ErrorCategory` (SmartEnum) → ProblemDetails, plutôt que des exceptions |
-| Validation | FluentValidation |
+| Erreurs HTTP | RFC 7807 uniforme ; corps JSON malformé → `400` propre (`BadRequestExceptionHandler` + `UseExceptionHandler`), jamais de stack trace |
+| Validation | FluentValidation ; devise validée ISO 4217 (`MustBeSupportedCurrency`) |
 | DI | Scrutor (scan des handlers) |
 | Versioning API | Asp.Versioning (`/api/v{version}`) |
 | Feature flags | Microsoft.FeatureManagement (`FeatureManagement:<Module>`) |
@@ -129,7 +130,7 @@ Pops-ShowRoom.slnx
 │  │  ├─ ShowRoom.Modules.Order.Contracts   # messages AMQP partagés (contrat inter-service)
 │  │  └─ ShowRoom.Modules.Product      # bounded context Product
 │  ├─ buildingblocks/ShowRoom.BuildingBlocks  # primitives DDD, Result, PublicId, observabilité, pagination
-│  └─ sharedkernel/ShowRoom.SharedKernel      # value objects partagés (Email, PhoneNumber)
+│  └─ sharedkernel/ShowRoom.SharedKernel      # value objects partagés (Email, PhoneNumber, Currency)
 └─ tests/
    ├─ ShowRoom.Testing                        # harnais d'intégration (Testcontainers, factory générique)
    ├─ ShowRoom.Architecture.Tests             # tests de frontières (ArchUnitNET)
@@ -165,6 +166,7 @@ identifiées par leur **`PublicId`** (jamais l'identifiant technique).
 | Verbe | Route | Description | Réponses |
 |---|---|---|---|
 | `POST` | `/api/v1/customers` | Crée un client | `201` + `PublicId` · `400` · `409` (email déjà utilisé) |
+| `GET` | `/api/v1/customers?page=&pageSize=&search=` | Liste paginée, filtre optionnel par nom | `200` · `400` |
 | `GET` | `/api/v1/customers/{publicId}` | Détail d'un client | `200` · `400` · `404` |
 | `GET` | `/api/v1/customers/{publicId}/with-orders` | Client + historique de commandes (récupéré via AMQP) | `200` (avec `ordersAvailable`) · `400` · `404` |
 
@@ -184,7 +186,7 @@ identifiées par leur **`PublicId`** (jamais l'identifiant technique).
 |---|---|---|---|
 | `POST` | `/api/v1/products` | Crée un produit | `201` + `PublicId` · `400` |
 | `GET` | `/api/v1/products/{publicId}` | Détail d'un produit | `200` · `400` · `404` |
-| `GET` | `/api/v1/products?page=&pageSize=&search=` | Liste paginée, recherche optionnelle par nom | `200` · `400` |
+| `GET` | `/api/v1/products?page=&pageSize=&publicId=` | Liste paginée, filtre optionnel par public id | `200` · `400` |
 
 **Communs aux deux services** : `GET /api/status`, `GET /health` (readiness), `GET /alive`
 (liveness), `/openapi` + `/scalar` (développement).

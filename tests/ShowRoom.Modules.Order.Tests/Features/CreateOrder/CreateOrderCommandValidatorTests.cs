@@ -43,6 +43,16 @@ public sealed class CreateOrderCommandValidatorTests
         result.IsValid.Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData("Eur")]  // wrong casing
+    [InlineData("ZZZ")]  // unknown ISO code
+    public void Fails_when_currency_is_not_a_supported_iso_code(string currency)
+    {
+        var result = _sut.Validate(ValidCommand() with { Currency = currency });
+
+        result.IsValid.Should().BeFalse();
+    }
+
     [Fact]
     public void Fails_when_there_are_no_lines()
     {

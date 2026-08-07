@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using ShowRoom.BuildingBlocks.Domain.PublicIds;
 using ShowRoom.Modules.Product.Domain;
+using ShowRoom.SharedKernel.Currencies;
 using ProductAggregate = ShowRoom.Modules.Product.Domain.Product;
 
 namespace ShowRoom.Modules.Product.Persistence.Configurations;
@@ -31,7 +32,10 @@ internal sealed class ProductConfiguration : IEntityTypeConfiguration<ProductAgg
         builder.Property(product => product.Description).HasMaxLength(2000);
 
         builder.Property(product => product.Price).HasColumnType("numeric(18,2)").IsRequired();
-        builder.Property(product => product.Currency).HasMaxLength(3).IsRequired();
+        builder.Property(product => product.Currency)
+            .HasConversion(currency => currency.Value, value => Currency.Create(value).Value)
+            .HasMaxLength(3)
+            .IsRequired();
 
         builder.Property(product => product.Status)
             .HasConversion(status => status.Value, value => ProductStatus.FromValue(value))

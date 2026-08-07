@@ -39,4 +39,32 @@ public sealed class CreateProductCommandValidatorTests
     {
         _sut.Validate(ValidCommand() with { Currency = "EU" }).IsValid.Should().BeFalse();
     }
+
+    [Theory]
+    [InlineData("Eur")]  // wrong casing
+    [InlineData("eur")]  // lower case
+    [InlineData("ZZZ")]  // unknown ISO code
+    [InlineData("123")]  // not letters
+    [InlineData("EURO")] // too long
+    public void Fails_when_currency_is_not_a_supported_iso_code(string currency)
+    {
+        _sut.Validate(ValidCommand() with { Currency = currency }).IsValid.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("EUR")]
+    [InlineData("USD")]
+    [InlineData("JPY")]
+    public void Passes_for_a_supported_currency(string currency)
+    {
+        _sut.Validate(ValidCommand() with { Currency = currency }).IsValid.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void Passes_when_currency_is_omitted_and_defaulted_downstream(string? currency)
+    {
+        _sut.Validate(ValidCommand() with { Currency = currency }).IsValid.Should().BeTrue();
+    }
 }

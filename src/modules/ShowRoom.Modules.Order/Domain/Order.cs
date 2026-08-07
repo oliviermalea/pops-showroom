@@ -2,6 +2,7 @@ using ShowRoom.BuildingBlocks.Domain.Abstractions;
 using ShowRoom.BuildingBlocks.Domain.Primitives;
 using ShowRoom.BuildingBlocks.Domain.PublicIds;
 using ShowRoom.BuildingBlocks.Results;
+using ShowRoom.SharedKernel.Currencies;
 
 namespace ShowRoom.Modules.Order.Domain;
 
@@ -13,8 +14,6 @@ namespace ShowRoom.Modules.Order.Domain;
 /// </summary>
 public sealed class Order : AggregateRootWithPublicId<OrderId>, IAuditable
 {
-    public const string DefaultCurrency = "EUR";
-
     private readonly List<OrderLine> _lines = [];
 
     private Order(OrderId id)
@@ -24,7 +23,7 @@ public sealed class Order : AggregateRootWithPublicId<OrderId>, IAuditable
         OrderId id,
         PublicId publicId,
         PublicId customerPublicId,
-        string currency,
+        Currency currency,
         OrderStatus status,
         DateTimeOffset createdAt,
         DateTimeOffset? updatedAt)
@@ -42,7 +41,7 @@ public sealed class Order : AggregateRootWithPublicId<OrderId>, IAuditable
 
     public PublicId CustomerPublicId { get; private set; } = null!;
 
-    public string Currency { get; private set; } = DefaultCurrency;
+    public Currency Currency { get; private set; } = Currency.Default;
 
     public OrderStatus Status { get; private set; } = OrderStatus.Pending;
 
@@ -74,6 +73,12 @@ public sealed class Order : AggregateRootWithPublicId<OrderId>, IAuditable
             return OrderErrors.NoLines;
         }
 
+        var currencyResult = Currency.CreateOrDefault(currency);
+        if (currencyResult.IsFailure)
+        {
+            return Result<Order>.Fail(currencyResult.Errors);
+        }
+
         var builtLines = new List<OrderLine>(lines.Count);
         foreach (var draft in lines)
         {
@@ -95,7 +100,7 @@ public sealed class Order : AggregateRootWithPublicId<OrderId>, IAuditable
             OrderId.FromGuid(Guid.CreateVersion7()),
             PublicIdFactory.ForOrder().Value,
             customerPublicId,
-            string.IsNullOrWhiteSpace(currency) ? DefaultCurrency : currency.Trim().ToUpperInvariant(),
+            currencyResult.Value,
             OrderStatus.Pending,
             createdAt,
             updatedAt: null);
@@ -110,7 +115,7 @@ public sealed class Order : AggregateRootWithPublicId<OrderId>, IAuditable
         OrderId id,
         PublicId publicId,
         PublicId customerPublicId,
-        string currency,
+        Currency currency,
         OrderStatus status,
         IEnumerable<OrderLine> lines,
         DateTimeOffset createdAt,

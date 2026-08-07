@@ -14,7 +14,7 @@ public static class GetOrdersForCustomerAssembler
             .Select(order => new CustomerOrderSummary(
                 OrderPublicId: order.PublicId.Value,
                 Status: order.Status.Value,
-                Currency: order.Currency,
+                Currency: order.Currency.Value,
                 TotalAmount: order.TotalAmount,
                 ItemCount: order.Lines.Count,
                 CreatedAt: order.CreatedAt))

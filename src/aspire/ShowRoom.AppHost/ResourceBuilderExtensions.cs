@@ -1,9 +1,27 @@
 ﻿using System.Diagnostics;
+using Aspire.Hosting.ApplicationModel;
 
 namespace ShowRoom.AppHost;
 
 internal static class ResourceBuilderExtensions
 {
+    /// <summary>
+    /// Adds an explicit, clickable Scalar API-docs link (<c>/scalar/v1</c>) to the resource in the Aspire
+    /// dashboard's Endpoints column, resolved at runtime against the resource's HTTPS endpoint. Unlike
+    /// <see cref="WithScalar{T}"/> (a dashboard command/button), this surfaces the doc URL directly instead
+    /// of the bare <c>host:port</c>.
+    /// </summary>
+    internal static IResourceBuilder<T> WithScalarUrl<T>(this IResourceBuilder<T> builder)
+        where T : IResourceWithEndpoints
+    {
+        return builder.WithUrlForEndpoint("https", _ => new ResourceUrlAnnotation
+        {
+            Url = "/scalar/v1",
+            DisplayText = "Scalar API",
+        });
+    }
+
+
     internal static IResourceBuilder<T> WithSwaggerUI<T>(this IResourceBuilder<T> builder)
         where T : IResourceWithEndpoints
     {
