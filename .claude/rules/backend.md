@@ -12,6 +12,7 @@
   - Response (if needed)
   - Assembler `To()/From()` when mapping is required
 - No direct cross-module DB/internal access. Use explicit API/event contracts.
+- No connection string or credential in source code. Runtime persistence reads the connection string from `IConfiguration` (`DatabaseModule.AddDatabase` → `GetConnectionString(...)`, fed by Aspire/env); `IDesignTimeDbContextFactory` builds an `IConfiguration` from env vars (+ optional `appsettings*.json`) and any local fallback is password-less. A committed connection string with a password (in `.cs` or a tracked `appsettings*.json`) blocks the change (see global §6).
 - Domain model must remain persistence-framework agnostic.
 - Breaking API/event changes require versioning (`/v2`, new event version), never silent destructive edits.
 - Primary identifiers in domain entities and aggregates must always be implemented as StronglyTypedId value types; primitive `Guid`/`string` identifiers are forbidden in the domain model.

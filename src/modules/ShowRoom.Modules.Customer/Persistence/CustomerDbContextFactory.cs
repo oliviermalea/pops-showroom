@@ -1,18 +1,35 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
+using Microsoft.Extensions.Configuration;
 
 namespace ShowRoom.Modules.Customer.Persistence;
 
 /// <summary>
 /// Design-time factory used by EF Core tooling (<c>dotnet ef migrations</c>). Not used at runtime,
-/// where the context is configured through Aspire's Npgsql integration.
+/// where the context is configured through Aspire's Npgsql integration. The connection string is read
+/// from configuration/environment — never hardcoded and never carrying a secret in source.
+/// <c>migrations add</c> does not connect, so the password-less local fallback is sufficient; provide
+/// real credentials via <c>ConnectionStrings__showroom-customers</c> (env) for design-time
+/// <c>database update</c>.
 /// </summary>
 public sealed class CustomerDbContextFactory : IDesignTimeDbContextFactory<CustomersContext>
 {
     public CustomersContext CreateDbContext(string[] args)
     {
+        var configuration = new ConfigurationBuilder()
+            .SetBasePath(Directory.GetCurrentDirectory())
+            .AddJsonFile("appsettings.json", optional: true)
+            .AddJsonFile("appsettings.Development.json", optional: true)
+            .AddEnvironmentVariables()
+            .Build();
+
+        var connectionString =
+            configuration.GetConnectionString("showroom-customers")
+            ?? configuration.GetConnectionString("Customers")
+            ?? "Host=localhost;Port=5432;Database=customerdb;Username=postgres";
+
         var options = new DbContextOptionsBuilder<CustomersContext>()
-            .UseNpgsql("Host=localhost;Port=5432;Database=customerdb;Username=postgres;Password=postgres")
+            .UseNpgsql(connectionString)
             .Options;
 
         return new CustomersContext(options);

@@ -75,6 +75,8 @@ If multiple rules conflict, apply in this order:
 
 ## 6) Security and robustness baseline
 - Never hardcode secrets or sensitive environment values.
+- **Connection strings and credentials must NEVER appear in source code (`.cs`) — not in runtime code, and not in design-time helpers such as `IDesignTimeDbContextFactory`.** Resolve every connection string (database, message broker, cache, external service) exclusively from configuration: `IConfiguration.GetConnectionString(...)` / options bound from a config section, fed at runtime by the platform (Aspire `WithReference`, environment variables, or a secret store). Design-time factories must build an `IConfiguration` from environment variables (and optional local `appsettings*.json`) and read the connection string from it; any local fallback embedded for tooling convenience must be **password-less** (e.g. `Host=localhost;Database=...;Username=...` with no `Password=`). A connection string carrying a password committed to the repository — in `.cs` **or** in a tracked `appsettings*.json` — is a defect that must block the change.
+- Local/dev non-secret defaults may live in `appsettings.Development.json`; real secrets are provided only via environment injection or a secret store, never committed.
 - Validate untrusted inputs at system boundaries.
 - Keep failure handling explicit (timeouts/retries/fallbacks where relevant).
 - Favor short critical transactions and decoupled side effects when appropriate.

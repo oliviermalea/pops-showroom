@@ -28,6 +28,7 @@ Log.Information("Environment: {Environment}", env.EnvironmentName);
 // in the Aspire dashboard "Structured Logs" (Serilog otherwise writes only to its own Console/File sinks).
 builder.Host.UseSerilog(
     (context, loggerConfiguration) => ConfigureAppLogger(loggerConfiguration),
+    preserveStaticLogger: true,
     writeToProviders: true);
 //// End Logs
 
