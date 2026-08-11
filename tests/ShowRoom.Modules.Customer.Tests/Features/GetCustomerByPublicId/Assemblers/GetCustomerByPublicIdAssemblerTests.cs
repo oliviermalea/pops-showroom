@@ -48,12 +48,11 @@ public sealed class GetCustomerByPublicIdAssemblerTests
         response.Email.Should().Be(email.Trim().ToLowerInvariant());
         response.Phone.Should().Be(phone);
         response.Status.Should().Be("Active");
-        response.CreatedAt.Should().Be(createdAt);
-        response.UpdatedAt.Should().Be(updatedAt);
+        response.RegisteredOn.Should().Be(createdAt);
     }
 
     [Fact]
-    public void From_maps_null_phone_and_null_updated_at_when_absent()
+    public void From_maps_null_phone_when_absent()
     {
         // Arrange
         var sut = CustomerAggregate.Restore(
@@ -72,7 +71,6 @@ public sealed class GetCustomerByPublicIdAssemblerTests
 
         // Assert
         response.Phone.Should().BeNull();
-        response.UpdatedAt.Should().BeNull();
         response.Status.Should().Be("Inactive");
         response.DisplayName.Should().Be("Ada Lovelace");
     }

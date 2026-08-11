@@ -2,7 +2,10 @@ using ShowRoom.BuildingBlocks.Domain.PublicIds;
 
 namespace ShowRoom.Modules.Order.Features.GetOrders;
 
-/// <summary>A compact order representation for list views (no line detail, totals pre-computed).</summary>
+/// <summary>
+/// A compact order representation for list views (no line detail, totals pre-computed). The paginated
+/// list is returned as the shared <see cref="ShowRoom.BuildingBlocks.Application.Pagination.PagedResult{T}"/>.
+/// </summary>
 public sealed record OrderSummaryResponse(
     PublicId PublicId,
     string CustomerPublicId,
@@ -10,12 +13,4 @@ public sealed record OrderSummaryResponse(
     string Currency,
     decimal TotalAmount,
     int ItemCount,
-    DateTimeOffset CreatedAt);
-
-/// <summary>Paginated list of order summaries.</summary>
-public sealed record GetOrdersResponse(
-    IReadOnlyCollection<OrderSummaryResponse> Orders,
-    int Page,
-    int PageSize,
-    int TotalItems,
-    int TotalPages);
+    DateTimeOffset OrderDate);

@@ -2,7 +2,10 @@ using ShowRoom.BuildingBlocks.Domain.PublicIds;
 
 namespace ShowRoom.Modules.Customer.Features.GetCustomers;
 
-/// <summary>A compact customer representation for list views (no phone/updated detail).</summary>
+/// <summary>
+/// A compact customer representation for list views (no phone/updated detail). The paginated list is
+/// returned as the shared <see cref="ShowRoom.BuildingBlocks.Application.Pagination.PagedResult{T}"/>.
+/// </summary>
 public sealed record CustomerSummaryResponse(
     PublicId PublicId,
     string FirstName,
@@ -10,12 +13,4 @@ public sealed record CustomerSummaryResponse(
     string DisplayName,
     string Email,
     string Status,
-    DateTimeOffset CreatedAt);
-
-/// <summary>Paginated list of customer summaries.</summary>
-public sealed record GetCustomersResponse(
-    IReadOnlyCollection<CustomerSummaryResponse> Customers,
-    int Page,
-    int PageSize,
-    int TotalItems,
-    int TotalPages);
+    DateTimeOffset RegisteredOn);

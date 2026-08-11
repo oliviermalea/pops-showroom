@@ -19,9 +19,10 @@ public sealed class GetCustomerWithOrdersAssemblerTests
     {
         // Arrange
         var customer = NewCustomer();
+        var orderDate = DateTimeOffset.UtcNow.AddDays(-2);
         var orders = new[]
         {
-            new CustomerOrderSummary("ord_" + new string('a', 32), "Pending", "EUR", 25.5m, 2, DateTimeOffset.UtcNow),
+            new CustomerOrderSummary("ord_" + new string('a', 32), "Pending", "EUR", 25.5m, 2, orderDate),
         };
 
         // Act
@@ -31,11 +32,13 @@ public sealed class GetCustomerWithOrdersAssemblerTests
         sut.PublicId.Should().Be(customer.PublicId);
         sut.DisplayName.Should().Be("Grace Hopper");
         sut.Email.Should().Be("grace@example.com");
+        sut.RegisteredOn.Should().Be(customer.CreatedAt);
         sut.OrdersAvailable.Should().BeTrue();
         sut.Orders.Should().ContainSingle();
         sut.Orders.Single().OrderPublicId.Should().Be(orders[0].OrderPublicId);
         sut.Orders.Single().TotalAmount.Should().Be(25.5m);
         sut.Orders.Single().ItemCount.Should().Be(2);
+        sut.Orders.Single().OrderDate.Should().Be(orderDate);
     }
 
     [Fact]

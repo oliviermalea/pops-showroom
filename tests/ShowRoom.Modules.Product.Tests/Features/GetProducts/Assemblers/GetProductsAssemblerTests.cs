@@ -11,8 +11,7 @@ public sealed class GetProductsAssemblerTests
     public void ToSummary_projects_the_compact_view()
     {
         // Arrange
-        var createdAt = DateTimeOffset.UtcNow;
-        var product = ProductAggregate.Create("Surf des mers", "desc", 349.90m, "EUR", createdAt).Value;
+        var product = ProductAggregate.Create("Surf des mers", "desc", 349.90m, "EUR", DateTimeOffset.UtcNow).Value;
 
         // Act
         var sut = GetProductsAssembler.ToSummary(product);
@@ -23,6 +22,5 @@ public sealed class GetProductsAssemblerTests
         sut.Price.Should().Be(349.90m);
         sut.Currency.Should().Be("EUR");
         sut.Status.Should().Be("Available");
-        sut.CreatedAt.Should().Be(createdAt);
     }
 }

@@ -17,6 +17,6 @@ public static class GetOrdersForCustomerAssembler
                 Currency: order.Currency.Value,
                 TotalAmount: order.TotalAmount,
                 ItemCount: order.Lines.Count,
-                CreatedAt: order.CreatedAt))
+                OrderDate: order.CreatedAt))
             .ToList());
 }

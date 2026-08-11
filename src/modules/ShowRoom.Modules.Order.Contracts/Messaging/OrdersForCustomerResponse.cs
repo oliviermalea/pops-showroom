@@ -13,4 +13,4 @@ public sealed record CustomerOrderSummary(
     string Currency,
     decimal TotalAmount,
     int ItemCount,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset OrderDate);

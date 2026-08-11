@@ -35,6 +35,6 @@ public sealed class GetOrdersAssemblerTests
         sut.Currency.Should().Be("EUR");
         sut.TotalAmount.Should().Be(30m);
         sut.ItemCount.Should().Be(2);
-        sut.CreatedAt.Should().Be(createdAt);
+        sut.OrderDate.Should().Be(createdAt);
     }
 }

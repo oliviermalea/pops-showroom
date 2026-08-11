@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using ShowRoom.BuildingBlocks.Application;
+using ShowRoom.BuildingBlocks.Application.Pagination;
 using ShowRoom.BuildingBlocks.Http.Errors;
 using ShowRoom.BuildingBlocks.Results;
 
@@ -18,14 +19,14 @@ internal static class GetProductsEndpoint
         endpoints.MapGet("/", HandleAsync)
             .WithName("GetProducts")
             .WithSummary("Lists products (paginated), optionally filtered by product public id.")
-            .Produces<GetProductsResponse>(StatusCodes.Status200OK)
+            .Produces<PagedResult<ProductSummaryResponse>>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status400BadRequest);
 
         return endpoints;
     }
 
     private static async Task<IResult> HandleAsync(
-        IQueryHandler<GetProductsQuery, Result<GetProductsResponse>> handler,
+        IQueryHandler<GetProductsQuery, Result<PagedResult<ProductSummaryResponse>>> handler,
         int page = 1,
         int pageSize = 20,
         string? publicId = null,

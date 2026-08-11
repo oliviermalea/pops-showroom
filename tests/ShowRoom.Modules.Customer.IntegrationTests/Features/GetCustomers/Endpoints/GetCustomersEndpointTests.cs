@@ -5,6 +5,7 @@ using System.Net.Http.Json;
 using AwesomeAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using ShowRoom.BuildingBlocks.Application.Pagination;
 using ShowRoom.Modules.Customer;
 using ShowRoom.Modules.Customer.Features.GetCustomers;
 using ShowRoom.Modules.Customer.Persistence;
@@ -42,10 +43,10 @@ public class GetCustomersEndpointTests(
         // Assert
         sut.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var body = await sut.Content.ReadFromJsonAsync<GetCustomersResponse>(cancellationToken);
+        var body = await sut.Content.ReadFromJsonAsync<PagedResult<CustomerSummaryResponse>>(cancellationToken);
         body.Should().NotBeNull();
         body!.PageSize.Should().Be(2);
-        body.Customers.Should().HaveCount(2);
+        body.Items.Should().HaveCount(2);
         body.TotalItems.Should().BeGreaterThanOrEqualTo(3);
         body.Page.Should().Be(1);
     }
@@ -67,10 +68,10 @@ public class GetCustomersEndpointTests(
         // Assert
         sut.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var body = await sut.Content.ReadFromJsonAsync<GetCustomersResponse>(cancellationToken);
+        var body = await sut.Content.ReadFromJsonAsync<PagedResult<CustomerSummaryResponse>>(cancellationToken);
         body.Should().NotBeNull();
-        body!.Customers.Should().ContainSingle();
-        body.Customers.Should().OnlyContain(customer => customer.LastName == uniqueLastName);
+        body!.Items.Should().ContainSingle();
+        body.Items.Should().OnlyContain(customer => customer.LastName == uniqueLastName);
         body.TotalItems.Should().Be(1);
     }
 

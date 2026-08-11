@@ -39,19 +39,16 @@ public sealed class GetProductByPublicIdAssemblerTests
         sut.Price.Should().Be(349.90m);
         sut.Currency.Should().Be("EUR");
         sut.Status.Should().Be("Discontinued");
-        sut.CreatedAt.Should().Be(createdAt);
-        sut.UpdatedAt.Should().Be(updatedAt);
     }
 
     [Fact]
-    public void From_maps_null_description_and_null_updated_at_when_absent()
+    public void From_maps_null_description_when_absent()
     {
         var product = ProductAggregate.Create("Kayak", null, 10m, "EUR", DateTimeOffset.UtcNow).Value;
 
         var sut = GetProductByPublicIdAssembler.From(product);
 
         sut.Description.Should().BeNull();
-        sut.UpdatedAt.Should().BeNull();
         sut.Status.Should().Be("Available");
     }
 }

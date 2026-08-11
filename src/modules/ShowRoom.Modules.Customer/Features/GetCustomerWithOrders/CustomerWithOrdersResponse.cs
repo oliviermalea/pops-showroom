@@ -15,8 +15,7 @@ public sealed record CustomerWithOrdersResponse(
     string Email,
     string? Phone,
     string Status,
-    DateTimeOffset CreatedAt,
-    DateTimeOffset? UpdatedAt,
+    DateTimeOffset RegisteredOn,
     bool OrdersAvailable,
     IReadOnlyCollection<OrderHistoryLine> Orders);
 
@@ -27,4 +26,4 @@ public sealed record OrderHistoryLine(
     string Currency,
     decimal TotalAmount,
     int ItemCount,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset OrderDate);

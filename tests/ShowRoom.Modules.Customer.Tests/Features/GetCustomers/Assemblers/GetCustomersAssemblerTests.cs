@@ -45,7 +45,7 @@ public sealed class GetCustomersAssemblerTests
         sut.DisplayName.Should().Be($"{firstName} {lastName}");
         sut.Email.Should().Be(email.Trim().ToLowerInvariant());
         sut.Status.Should().Be("Active");
-        sut.CreatedAt.Should().Be(createdAt);
+        sut.RegisteredOn.Should().Be(createdAt);
     }
 
     [Fact]

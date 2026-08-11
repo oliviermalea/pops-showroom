@@ -13,13 +13,13 @@ namespace ShowRoom.Modules.Customer.Features.GetCustomers;
 internal sealed class GetCustomersHandler(
     CustomersContext context,
     ILogger<GetCustomersHandler> logger)
-    : IQueryHandler<GetCustomersQuery, Result<GetCustomersResponse>>
+    : IQueryHandler<GetCustomersQuery, Result<PagedResult<CustomerSummaryResponse>>>
 {
     private const string FeatureName = "GetCustomers";
     private const int DefaultPageSize = 20;
     private const int MaxPageSize = 100;
 
-    public async Task<Result<GetCustomersResponse>> HandleAsync(
+    public async Task<Result<PagedResult<CustomerSummaryResponse>>> HandleAsync(
         GetCustomersQuery query,
         CancellationToken cancellationToken = default)
     {
@@ -66,12 +66,7 @@ internal sealed class GetCustomersHandler(
             paged.Items.Count,
             paged.Page);
 
-        return Result<GetCustomersResponse>.Success(new GetCustomersResponse(
-            paged.Items,
-            paged.Page,
-            paged.PageSize,
-            paged.TotalItems,
-            paged.TotalPages));
+        return Result<PagedResult<CustomerSummaryResponse>>.Success(paged);
     }
 
     private static (int Page, int PageSize) NormalizePagination(int page, int pageSize)

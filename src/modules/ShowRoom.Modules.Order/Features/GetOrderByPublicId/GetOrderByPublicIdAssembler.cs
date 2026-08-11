@@ -11,6 +11,7 @@ public static class GetOrderByPublicIdAssembler
             CustomerPublicId: order.CustomerPublicId.Value,
             Currency: order.Currency.Value,
             Status: order.Status.Value,
+            OrderDate: order.CreatedAt,
             TotalAmount: order.TotalAmount,
             Lines: order.Lines
                 .Select(line => new OrderLineResponse(
@@ -19,7 +20,5 @@ public static class GetOrderByPublicIdAssembler
                     Quantity: line.Quantity,
                     UnitPrice: line.UnitPrice,
                     LineTotal: line.LineTotal))
-                .ToList(),
-            CreatedAt: order.CreatedAt,
-            UpdatedAt: order.UpdatedAt);
+                .ToList());
 }

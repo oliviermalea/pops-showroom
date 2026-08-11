@@ -13,5 +13,5 @@ public static class GetCustomersAssembler
             DisplayName: customer.DisplayName,
             Email: customer.Email.Value,
             Status: customer.Status.Value,
-            CreatedAt: customer.CreatedAt);
+            RegisteredOn: customer.CreatedAt);
 }

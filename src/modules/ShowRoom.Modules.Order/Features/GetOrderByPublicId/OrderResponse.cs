@@ -11,10 +11,9 @@ public sealed record OrderResponse(
     string CustomerPublicId,
     string Currency,
     string Status,
+    DateTimeOffset OrderDate,
     decimal TotalAmount,
-    IReadOnlyCollection<OrderLineResponse> Lines,
-    DateTimeOffset CreatedAt,
-    DateTimeOffset? UpdatedAt);
+    IReadOnlyCollection<OrderLineResponse> Lines);
 
 /// <summary>A single line of the detailed order representation.</summary>
 public sealed record OrderLineResponse(

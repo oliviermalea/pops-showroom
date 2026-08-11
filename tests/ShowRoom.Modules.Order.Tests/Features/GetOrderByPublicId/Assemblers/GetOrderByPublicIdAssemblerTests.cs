@@ -36,8 +36,7 @@ public sealed class GetOrderByPublicIdAssemblerTests
         sut.Currency.Should().Be("EUR");
         sut.Status.Should().Be("Pending");
         sut.TotalAmount.Should().Be(25.5m);
-        sut.CreatedAt.Should().Be(createdAt);
-        sut.UpdatedAt.Should().BeNull();
+        sut.OrderDate.Should().Be(createdAt);
         sut.Lines.Should().HaveCount(2);
 
         var firstLine = sut.Lines.First();

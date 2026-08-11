@@ -16,6 +16,5 @@ public static class GetCustomerByPublicIdAssembler
             Email: customer.Email.Value,
             Phone: customer.Phone?.Value,
             Status: customer.Status.Value,
-            CreatedAt: customer.CreatedAt,
-            UpdatedAt: customer.UpdatedAt);
+            RegisteredOn: customer.CreatedAt);
 }

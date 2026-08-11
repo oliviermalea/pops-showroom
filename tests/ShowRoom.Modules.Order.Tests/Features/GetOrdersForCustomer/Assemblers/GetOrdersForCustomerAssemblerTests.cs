@@ -14,6 +14,7 @@ public sealed class GetOrdersForCustomerAssemblerTests
     {
         // Arrange
         var customerPublicId = PublicIdFactory.ForCustomer().Value;
+        var createdAt = DateTimeOffset.UtcNow;
         var order = OrderAggregate.Create(
             customerPublicId,
             "EUR",
@@ -21,7 +22,7 @@ public sealed class GetOrdersForCustomerAssemblerTests
                 new OrderLineDraft(PublicIdFactory.ForProduct().Value, "Surf des mers", 2, 10m),
                 new OrderLineDraft(PublicIdFactory.ForProduct().Value, "Kayak", 1, 5.5m),
             ],
-            DateTimeOffset.UtcNow).Value;
+            createdAt).Value;
 
         // Act
         var sut = GetOrdersForCustomerAssembler.From([order]);
@@ -34,6 +35,7 @@ public sealed class GetOrdersForCustomerAssemblerTests
         summary.Currency.Should().Be("EUR");
         summary.TotalAmount.Should().Be(25.5m);
         summary.ItemCount.Should().Be(2);
+        summary.OrderDate.Should().Be(createdAt);
     }
 
     [Fact]

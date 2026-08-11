@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Http.Json;
 using AwesomeAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
+using ShowRoom.BuildingBlocks.Application.Pagination;
 using ShowRoom.BuildingBlocks.Domain.PublicIds;
 using ShowRoom.Modules.Order;
 using ShowRoom.Modules.Order.Features.CreateOrder;
@@ -61,10 +62,10 @@ public class GetOrdersEndpointTests(
         // Assert
         sut.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var body = await sut.Content.ReadFromJsonAsync<GetOrdersResponse>(cancellationToken);
+        var body = await sut.Content.ReadFromJsonAsync<PagedResult<OrderSummaryResponse>>(cancellationToken);
         body.Should().NotBeNull();
-        body!.Orders.Should().OnlyContain(order => order.CustomerPublicId == customerA);
-        body.Orders.Should().HaveCount(2);
+        body!.Items.Should().OnlyContain(order => order.CustomerPublicId == customerA);
+        body.Items.Should().HaveCount(2);
         body.TotalItems.Should().Be(2);
         body.Page.Should().Be(1);
     }
@@ -90,10 +91,10 @@ public class GetOrdersEndpointTests(
         // Assert
         sut.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var body = await sut.Content.ReadFromJsonAsync<GetOrdersResponse>(cancellationToken);
+        var body = await sut.Content.ReadFromJsonAsync<PagedResult<OrderSummaryResponse>>(cancellationToken);
         body.Should().NotBeNull();
         body!.PageSize.Should().Be(2);
-        body.Orders.Should().HaveCount(2);
+        body.Items.Should().HaveCount(2);
         body.TotalItems.Should().Be(3);
         body.TotalPages.Should().Be(2);
     }

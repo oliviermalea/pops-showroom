@@ -15,5 +15,4 @@ public sealed record CustomerResponse(
     string Email,
     string? Phone,
     string Status,
-    DateTimeOffset CreatedAt,
-    DateTimeOffset? UpdatedAt);
+    DateTimeOffset RegisteredOn);

@@ -11,6 +11,5 @@ public static class GetProductsAssembler
             Name: product.Name,
             Price: product.Price,
             Currency: product.Currency.Value,
-            Status: product.Status.Value,
-            CreatedAt: product.CreatedAt);
+            Status: product.Status.Value);
 }

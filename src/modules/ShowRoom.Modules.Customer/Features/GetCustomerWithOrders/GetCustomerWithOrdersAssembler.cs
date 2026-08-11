@@ -21,8 +21,7 @@ public static class GetCustomerWithOrdersAssembler
             Email: customer.Email.Value,
             Phone: customer.Phone?.Value,
             Status: customer.Status.Value,
-            CreatedAt: customer.CreatedAt,
-            UpdatedAt: customer.UpdatedAt,
+            RegisteredOn: customer.CreatedAt,
             OrdersAvailable: ordersAvailable,
             Orders: orders
                 .Select(order => new OrderHistoryLine(
@@ -31,6 +30,6 @@ public static class GetCustomerWithOrdersAssembler
                     Currency: order.Currency,
                     TotalAmount: order.TotalAmount,
                     ItemCount: order.ItemCount,
-                    CreatedAt: order.CreatedAt))
+                    OrderDate: order.OrderDate))
                 .ToList());
 }

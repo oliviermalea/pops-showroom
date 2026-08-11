@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Http.Json;
 using AwesomeAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
+using ShowRoom.BuildingBlocks.Application.Pagination;
 using ShowRoom.Modules.Product;
 using ShowRoom.Modules.Product.Features.CreateProduct;
 using ShowRoom.Modules.Product.Features.GetProducts;
@@ -51,10 +52,10 @@ public class GetProductsEndpointTests(
         // Assert
         sut.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var body = await sut.Content.ReadFromJsonAsync<GetProductsResponse>(cancellationToken);
+        var body = await sut.Content.ReadFromJsonAsync<PagedResult<ProductSummaryResponse>>(cancellationToken);
         body.Should().NotBeNull();
         body!.PageSize.Should().Be(2);
-        body.Products.Should().HaveCount(2);
+        body.Items.Should().HaveCount(2);
         body.TotalItems.Should().BeGreaterThanOrEqualTo(3);
         body.Page.Should().Be(1);
     }
@@ -82,11 +83,11 @@ public class GetProductsEndpointTests(
         // Assert
         sut.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var body = await sut.Content.ReadFromJsonAsync<GetProductsResponse>(cancellationToken);
+        var body = await sut.Content.ReadFromJsonAsync<PagedResult<ProductSummaryResponse>>(cancellationToken);
         body.Should().NotBeNull();
-        body!.Products.Should().ContainSingle();
-        body.Products.Single().PublicId.Value.Should().Be(publicId);
-        body.Products.Single().Name.Should().Be($"Kayak-{unique}");
+        body!.Items.Should().ContainSingle();
+        body.Items.Single().PublicId.Value.Should().Be(publicId);
+        body.Items.Single().Name.Should().Be($"Kayak-{unique}");
         body.TotalItems.Should().Be(1);
     }
 

@@ -12,6 +12,4 @@ public sealed record ProductResponse(
     string? Description,
     decimal Price,
     string Currency,
-    string Status,
-    DateTimeOffset CreatedAt,
-    DateTimeOffset? UpdatedAt);
+    string Status);
