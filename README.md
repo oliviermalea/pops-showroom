@@ -199,14 +199,90 @@ identifiées par leur **`PublicId`** (jamais l'identifiant technique).
 - **Contrat** : `ShowRoom.Modules.Order.Contracts` — messages `GetOrdersForCustomer` /
   `OrdersForCustomerResponse`, records purs sans dépendance d'implémentation.
 - **Producteur** (Customer.Api) : `IMessageBus.InvokeAsync<OrdersForCustomerResponse>` derrière une
-  port anti-corruption (`IOrderHistory`), avec dégradation gracieuse (timeout Wolverine 5 s).
+  port anti-corruption (`IOrderHistory`), avec dégradation gracieuse (timeout Wolverine 5 s) et
+  **retry borné sur cold-start** (3 tentatives sur `TimeoutException` — le tout premier message
+  provisionne connexion + reply-queue au-delà des 5 s, les tentatives suivantes tombent sur un chemin
+  chaud ; la lecture étant idempotente, le retry est sûr).
 - **Consommateur** (Business.Api) : handler Wolverine écoutant la file RabbitMQ, répondant depuis
   `OrdersContext`.
 - **Traces** : sources OpenTelemetry `Wolverine` + `RabbitMQ.Client.*` enregistrées ; Wolverine
   propage le contexte de trace W3C à travers le broker → une seule trace distribuée
-  producteur → broker → consommateur → réponse. Métriques Wolverine exportées (`Wolverine*`).
+  producteur → broker → consommateur → réponse. Chaque élément (HTTP → send → publish → deliver →
+  handle → handler métier → **requêtes SQL** via l'instrumentation Npgsql) est un span avec sa
+  **durée**. Métriques Wolverine (`Wolverine*`), runtime, ASP.NET Core et **Npgsql** (pool/commandes)
+  exportées.
 - **Logs** : Serilog structuré, enrichi `[Module] [Feature] [RequestId]`, `RequestId` dérivé du
   `TraceId` pour corréler logs et traces des deux services.
+
+### Métriques messaging (`MessagingMetrics`) — prêtes pour un board
+
+Meter dédié **`ShowRoom.Messaging`** (enregistré via `AddMeter` dans les deux hosts), en complément —
+jamais en remplacement — des spans et des métriques Wolverine. Deux histogrammes de durée (`ms`) :
+
+| Instrument (OTel) | Type · unité | Enregistré par | Mesure |
+|---|---|---|---|
+| `showroom.messaging.roundtrip.duration` | Histogram · `ms` | Producteur (Customer.Api, port `IOrderHistory`) | round-trip complet perçu par l'appelant : produce → réponse reçue (broker + réseau + traitement) |
+| `showroom.messaging.handler.duration` | Histogram · `ms` | Consommateur (Business.Api, handler AMQP) | temps de traitement du message : dequeue → réponse produite |
+| `showroom.messaging.retries` | Counter · `{retry}` | Producteur (Customer.Api, port) | nombre de retries request/reply (cold-start / timeouts retentés) |
+
+**Tags** (pour `group by` / filtres dans le board) :
+
+| Tag | Valeurs | Sur |
+|---|---|---|
+| `messaging.module` | `Customer`, `Order` | roundtrip · handler · retries |
+| `messaging.feature` | `GetCustomerWithOrders`, `GetOrdersForCustomer` | roundtrip · handler · retries |
+| `messaging.message` | `GetOrdersForCustomer` | roundtrip · retries |
+| `messaging.outcome` | `success`, `failure`, `invalid_request` | roundtrip · handler |
+
+**Panneaux type** (histogrammes OTel → en Prometheus, `.` devient `_` et l'unité est suffixée, d'où
+`showroom_messaging_roundtrip_duration_milliseconds_*`) :
+
+```promql
+# Latence round-trip p95 (par feature)
+histogram_quantile(0.95, sum by (le, messaging_feature) (
+  rate(showroom_messaging_roundtrip_duration_milliseconds_bucket[5m])))
+
+# Latence de transport pure ≈ round-trip − handler (p95), isole le coût AMQP du traitement métier
+histogram_quantile(0.95, sum by (le) (rate(showroom_messaging_roundtrip_duration_milliseconds_bucket[5m])))
+- histogram_quantile(0.95, sum by (le) (rate(showroom_messaging_handler_duration_milliseconds_bucket[5m])))
+
+# Taux d'échec du round-trip (dégradations / timeouts non récupérés)
+sum(rate(showroom_messaging_roundtrip_duration_milliseconds_count{messaging_outcome!="success"}[5m]))
+/ sum(rate(showroom_messaging_roundtrip_duration_milliseconds_count[5m]))
+```
+
+Dans le **dashboard Aspire** (dev) : onglet *Metrics* → ressource → meter `ShowRoom.Messaging` ; les
+durées sont aussi posées en tags de span (`customer.orders.roundtrip_ms`, `messaging.handler.duration_ms`)
+visibles dans l'onglet *Traces*.
+
+**Dashboard Grafana prêt à l'emploi** : [`docs/observability/showroom-messaging.grafana.json`](docs/observability/showroom-messaging.grafana.json)
+— importable tel quel (Grafana → *Import* → choisir la datasource Prometheus). Panneaux : round-trip
+p50/p95/p99, handler p50/p95/p99, latence de transport (round-trip − handler), débit par `outcome`,
+taux d'échec, round-trip p95 par feature, **retries (cold-start)** ; variable `feature` pour filtrer.
+
+### Métriques métier (Orders)
+
+KPIs domaine (pas des timings d'infra), émis sur le Meter du module `ShowRoom.Modules.Order` (enregistré
+via `AddMeter(OrderModule.TelemetrySourceName)`), depuis le handler `CreateOrder` :
+
+| Instrument (OTel) | Type | Tags | Mesure |
+|---|---|---|---|
+| `showroom.orders.created` | Counter · `{order}` | `order.currency` | nombre de commandes créées (taux = commandes/s) |
+| `showroom.orders.amount` | Histogram | `order.currency` | total d'une commande ; `sum/count` = **panier moyen**, buckets = distribution |
+
+```promql
+# Panier moyen (montant moyen) par devise
+sum by (order_currency) (rate(showroom_orders_amount_sum[$__rate_interval]))
+/ sum by (order_currency) (rate(showroom_orders_amount_count[$__rate_interval]))
+
+# Commandes créées par minute
+sum(rate(showroom_orders_created_total[$__rate_interval])) * 60
+```
+
+**Dashboard métier** : [`docs/observability/showroom-business.grafana.json`](docs/observability/showroom-business.grafana.json)
+— commandes créées/min, panier moyen, distribution du montant (p50/p95), totaux sur la période ;
+variable `currency`. Le pattern (Meter de module + helper `*Metrics` dans le slice) s'étend aux autres
+modules.
 
 ---
 

@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.ServiceDiscovery;
+using Npgsql;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
@@ -57,7 +58,9 @@ public static class Extensions
             {
                 metrics.AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation()
-                    .AddRuntimeInstrumentation();
+                    .AddRuntimeInstrumentation()
+                    // Database metrics (connection pool usage, command counts/durations) from Npgsql.
+                    .AddNpgsqlInstrumentation();
             })
             .WithTracing(tracing =>
             {
@@ -70,7 +73,11 @@ public static class Extensions
                     )
                     // Uncomment the following line to enable gRPC instrumentation (requires the OpenTelemetry.Instrumentation.GrpcNetClient package)
                     //.AddGrpcClientInstrumentation()
-                    .AddHttpClientInstrumentation();
+                    .AddHttpClientInstrumentation()
+                    // Database: emit a span per PostgreSQL command (Npgsql ActivitySource) so DB query
+                    // durations show up in the distributed trace — otherwise the biggest latency
+                    // contributor in a handler is invisible between the handler span and its result.
+                    .AddNpgsql();
             });
 
         builder.AddOpenTelemetryExporters();

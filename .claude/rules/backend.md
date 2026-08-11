@@ -2,7 +2,7 @@
 
 ## QUICK HARD RULES (backend, must always pass)
 - Modulith boundaries are mandatory: `Features -> Domain`, `Features -> Persistence`, `Persistence -> Domain` (Domain is pure); reverse directions are forbidden. No repository pattern — feature handlers use the module DbContext directly.
-- Minimal APIs only. MVC Controllers/attributes are forbidden.
+- Minimal APIs only. MVC Controllers/attributes are forbidden. Every endpoint must declare `.WithName("<Feature>")` + `.WithSummary("<human-readable sentence>")` (e.g. `.WithSummary("Gets a product by its public id.")`) and its `.Produces<...>`/`.ProducesProblem(...)` response contract — an endpoint without a summary is incomplete (see §2.2).
 - MediatR is forbidden. AutoMapper is forbidden. Use Scrutor for DI.
 - Machine-to-machine (module-to-module / service-to-service) communication MUST use AMQP messaging (RabbitMQ via **Wolverine**, request/reply `IMessageBus.InvokeAsync`), never HTTP. A module reads another module's data only through that module's `*.Contracts` message contract over the bus — never via HTTP, a shared DB, or internal access. Wolverine is allowed ONLY as the messaging transport; features still use the `IQueryHandler`/`ICommandHandler` + Scrutor convention (Wolverine must NOT be used as an in-process mediator for feature handlers — MediatR-style usage stays forbidden).
 - Each feature must use VSA + REPR:
@@ -189,6 +189,8 @@ Each backend feature must include:
 - Always **Minimal APIs**
 - Never MVC controllers / attributes:
   - `[ApiController]`, `[FromBody]`, `[FromServices]`, etc. ❌
+- **Every endpoint must declare an OpenAPI summary via `.WithSummary(...)`** — a short, human-readable sentence describing what it does (e.g. `.WithSummary("Gets a product by its public id.")`, `.WithSummary("Creates a new order and returns its public id.")`). It must also declare a stable operation id via `.WithName("<Feature>")`. Both feed the OpenAPI document / Scalar UI, so an endpoint without a `.WithSummary` is incomplete. Keep summaries consistent across modules (`Gets a <entity> by its public id.`, `Lists <entities> (paginated)…`, `Creates a new <entity> and returns its public id.`).
+- Declare the response contract with `.Produces<T>(200)` / `.Produces<string>(201)` and the error shapes (`.ProducesProblem(400)`, `.ProducesValidationProblem()`, `.ProducesProblem(404)`…) so the generated OpenAPI is accurate.
 
 ### 2.3 Forbidden patterns
 - MediatR ❌

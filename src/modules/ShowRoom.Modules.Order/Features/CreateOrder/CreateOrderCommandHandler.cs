@@ -68,7 +68,11 @@ internal sealed class CreateOrderCommandHandler(
         await context.SaveChangesAsync(cancellationToken);
 
         var publicId = CreateOrderAssembler.From(order);
-        activity?.SetTag("order.public_id", publicId.Value);
+        activity?
+            .SetTag("order.public_id", publicId.Value)
+            .SetTag("order.total_amount", order.TotalAmount)
+            .SetTag("order.currency", order.Currency.Value);
+        CreateOrderMetrics.RecordCreated(order.TotalAmount, order.Currency.Value);
         logger.LogInformation("Order created with public id {PublicId}", publicId.Value);
 
         return Result<PublicId>.Success(publicId);

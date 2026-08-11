@@ -32,6 +32,11 @@ public static class MessagingMetrics
         unit: "ms",
         description: "Time spent handling an incoming AMQP message on the consumer.");
 
+    private static readonly Counter<long> Retries = Meter.CreateCounter<long>(
+        "showroom.messaging.retries",
+        unit: "{retry}",
+        description: "AMQP request/reply retry attempts (e.g. after a cold-start timeout).");
+
     /// <summary>Records a caller-side request/reply round-trip.</summary>
     public static void RecordRoundtrip(double elapsedMs, string module, string feature, string message, string outcome)
         => RoundtripDuration.Record(elapsedMs, new TagList
@@ -49,5 +54,14 @@ public static class MessagingMetrics
             { "messaging.module", module },
             { "messaging.feature", feature },
             { "messaging.outcome", outcome },
+        });
+
+    /// <summary>Records a caller-side retry attempt (e.g. a cold-start timeout being retried).</summary>
+    public static void RecordRetry(string module, string feature, string message)
+        => Retries.Add(1, new TagList
+        {
+            { "messaging.module", module },
+            { "messaging.feature", feature },
+            { "messaging.message", message },
         });
 }

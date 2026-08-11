@@ -28,6 +28,7 @@ public static class GetProductByPublicIdEndpoint
                     : (IResult)result.ToProblemDetails();
             })
             .WithName("GetProductByPublicId")
+            .WithSummary("Gets a product by its public id.")
             .Produces<ProductResponse>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound);

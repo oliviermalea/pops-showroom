@@ -61,6 +61,7 @@ internal sealed class MessagingOrderHistory(IMessageBus bus, ILogger<MessagingOr
                         "AMQP request/reply timed out (attempt {Attempt}/{MaxAttempts}); retrying after broker warm-up",
                         attempt,
                         MaxAttempts);
+                    MessagingMetrics.RecordRetry(CustomerModule.ModuleName, FeatureName, nameof(GetOrdersForCustomer));
                     await Task.Delay(TimeSpan.FromMilliseconds(200 * attempt), cancellationToken);
                 }
             }

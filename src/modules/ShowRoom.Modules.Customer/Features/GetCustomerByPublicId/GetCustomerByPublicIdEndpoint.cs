@@ -28,6 +28,7 @@ public static class GetCustomerByPublicIdEndpoint
                     : (IResult)result.ToProblemDetails();
             })
             .WithName("GetCustomerByPublicId")
+            .WithSummary("Gets a customer by its public id.")
             .Produces<CustomerResponse>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound);

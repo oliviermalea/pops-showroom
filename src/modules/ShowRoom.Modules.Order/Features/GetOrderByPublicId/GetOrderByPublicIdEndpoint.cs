@@ -28,6 +28,7 @@ public static class GetOrderByPublicIdEndpoint
                     : (IResult)result.ToProblemDetails();
             })
             .WithName("GetOrderByPublicId")
+            .WithSummary("Gets an order by its public id.")
             .Produces<OrderResponse>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound);
