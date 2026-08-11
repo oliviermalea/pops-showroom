@@ -22,7 +22,11 @@ public sealed class GetCustomerWithOrdersAssemblerTests
         var orderDate = DateTimeOffset.UtcNow.AddDays(-2);
         var orders = new[]
         {
-            new CustomerOrderSummary("ord_" + new string('a', 32), "Pending", "EUR", 25.5m, 2, orderDate),
+            new CustomerOrderSummary("ord_" + new string('a', 32), "Pending", "EUR", orderDate, 199.90m,
+            [
+                new CustomerOrderLine("prd_" + new string('b', 32), "Voile d'écume", 1, 74.90m, 74.90m),
+                new CustomerOrderLine("prd_" + new string('c', 32), "Planche des cimes", 1, 125.00m, 125.00m),
+            ]),
         };
 
         // Act
@@ -35,10 +39,14 @@ public sealed class GetCustomerWithOrdersAssemblerTests
         sut.RegisteredOn.Should().Be(customer.CreatedAt);
         sut.OrdersAvailable.Should().BeTrue();
         sut.Orders.Should().ContainSingle();
-        sut.Orders.Single().OrderPublicId.Should().Be(orders[0].OrderPublicId);
-        sut.Orders.Single().TotalAmount.Should().Be(25.5m);
-        sut.Orders.Single().ItemCount.Should().Be(2);
-        sut.Orders.Single().OrderDate.Should().Be(orderDate);
+
+        var order = sut.Orders.Single();
+        order.OrderPublicId.Should().Be(orders[0].OrderPublicId);
+        order.TotalAmount.Should().Be(199.90m);
+        order.OrderDate.Should().Be(orderDate);
+        order.Lines.Should().HaveCount(2);
+        order.Lines.Should().Contain(line =>
+            line.ProductName == "Voile d'écume" && line.Quantity == 1 && line.LineTotal == 74.90m);
     }
 
     [Fact]

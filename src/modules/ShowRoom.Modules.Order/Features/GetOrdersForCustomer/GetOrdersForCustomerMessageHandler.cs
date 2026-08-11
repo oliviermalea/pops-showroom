@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using ShowRoom.BuildingBlocks.Domain.PublicIds;
 using ShowRoom.BuildingBlocks.Messaging;
+using ShowRoom.BuildingBlocks.Observability;
 using ShowRoom.BuildingBlocks.Observability.Logging;
 using ShowRoom.BuildingBlocks.Observability.Tracing;
 using ShowRoom.Modules.Order.Contracts.Messaging;
@@ -41,6 +42,10 @@ public sealed class GetOrdersForCustomerMessageHandler
         using var scope = logger.BeginModuleScope(OrderModule.ModuleName, FeatureName, correlationId);
         using var activity = OrderModule.ActivitySource.StartActivity("order.get_orders_for_customer");
 
+        // Elapsed time handling this message on the consumer side (dequeue → reply produced), recorded as
+        // a metric and stamped on the span for the distributed trace.
+        var stopwatch = Stopwatch.StartNew();
+
         activity?
             .SetCommonTags(OrderModule.ModuleName, FeatureName, correlationId)
             .SetTag("messaging.system", "rabbitmq")
@@ -55,6 +60,7 @@ public sealed class GetOrdersForCustomerMessageHandler
                 .SetStatus(ActivityStatusCode.Error, "Malformed customer public id")
                 .SetTag("order.result.count", 0);
             logger.LogWarning("Received order query with malformed customer public id; returning empty result");
+            RecordHandlerMetric(activity, stopwatch, "invalid_request");
             return new OrdersForCustomerResponse([]);
         }
 
@@ -62,6 +68,7 @@ public sealed class GetOrdersForCustomerMessageHandler
 
         var orders = await context.Orders
             .AsNoTracking()
+            .Include(order => order.Lines)
             .Where(order => order.CustomerPublicId == customerPublicId!)
             .OrderByDescending(order => order.CreatedAt)
             .ToListAsync(cancellationToken);
@@ -71,6 +78,15 @@ public sealed class GetOrdersForCustomerMessageHandler
             orders.Count,
             message.CustomerPublicId);
 
+        RecordHandlerMetric(activity, stopwatch, "success");
         return GetOrdersForCustomerAssembler.From(orders);
+    }
+
+    private static void RecordHandlerMetric(Activity? activity, Stopwatch stopwatch, string outcome)
+    {
+        stopwatch.Stop();
+        var elapsedMs = stopwatch.Elapsed.TotalMilliseconds;
+        activity?.SetTag("messaging.handler.duration_ms", elapsedMs);
+        MessagingMetrics.RecordHandler(elapsedMs, OrderModule.ModuleName, FeatureName, outcome);
     }
 }

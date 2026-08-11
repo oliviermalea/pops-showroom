@@ -34,8 +34,14 @@ public sealed class GetOrdersForCustomerAssemblerTests
         summary.Status.Should().Be("Pending");
         summary.Currency.Should().Be("EUR");
         summary.TotalAmount.Should().Be(25.5m);
-        summary.ItemCount.Should().Be(2);
         summary.OrderDate.Should().Be(createdAt);
+        summary.Lines.Should().HaveCount(2);
+        summary.Lines.Should().Contain(line =>
+            line.ProductName == "Surf des mers" && line.Quantity == 2
+            && line.UnitPrice == 10m && line.LineTotal == 20m);
+        summary.Lines.Should().Contain(line =>
+            line.ProductName == "Kayak" && line.Quantity == 1
+            && line.UnitPrice == 5.5m && line.LineTotal == 5.5m);
     }
 
     [Fact]

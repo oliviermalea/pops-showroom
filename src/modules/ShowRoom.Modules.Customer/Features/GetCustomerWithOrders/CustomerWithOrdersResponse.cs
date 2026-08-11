@@ -19,11 +19,19 @@ public sealed record CustomerWithOrdersResponse(
     bool OrdersAvailable,
     IReadOnlyCollection<OrderHistoryLine> Orders);
 
-/// <summary>One order in the customer's order history (a line of the history, public projection).</summary>
+/// <summary>One order in the customer's order history (public projection), with its full line detail.</summary>
 public sealed record OrderHistoryLine(
     string OrderPublicId,
     string Status,
     string Currency,
+    DateTimeOffset OrderDate,
     decimal TotalAmount,
-    int ItemCount,
-    DateTimeOffset OrderDate);
+    IReadOnlyCollection<OrderLineDetail> Lines);
+
+/// <summary>A single product line of an order in the customer's order history.</summary>
+public sealed record OrderLineDetail(
+    string ProductPublicId,
+    string ProductName,
+    int Quantity,
+    decimal UnitPrice,
+    decimal LineTotal);

@@ -28,8 +28,15 @@ public static class GetCustomerWithOrdersAssembler
                     OrderPublicId: order.OrderPublicId,
                     Status: order.Status,
                     Currency: order.Currency,
+                    OrderDate: order.OrderDate,
                     TotalAmount: order.TotalAmount,
-                    ItemCount: order.ItemCount,
-                    OrderDate: order.OrderDate))
+                    Lines: order.Lines
+                        .Select(line => new OrderLineDetail(
+                            ProductPublicId: line.ProductPublicId,
+                            ProductName: line.ProductName,
+                            Quantity: line.Quantity,
+                            UnitPrice: line.UnitPrice,
+                            LineTotal: line.LineTotal))
+                        .ToList()))
                 .ToList());
 }

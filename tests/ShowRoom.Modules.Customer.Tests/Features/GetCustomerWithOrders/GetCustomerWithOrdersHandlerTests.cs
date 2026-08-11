@@ -48,7 +48,10 @@ public sealed class GetCustomerWithOrdersHandlerTests
         var customer = await SeedAsync(context);
         var orders = new OrdersForCustomerResponse(
         [
-            new CustomerOrderSummary("ord_" + new string('a', 32), "Pending", "EUR", 25.5m, 2, DateTimeOffset.UtcNow),
+            new CustomerOrderSummary("ord_" + new string('a', 32), "Pending", "EUR", DateTimeOffset.UtcNow, 74.90m,
+            [
+                new CustomerOrderLine("prd_" + new string('b', 32), "Voile d'écume", 1, 74.90m, 74.90m),
+            ]),
         ]);
         var sut = new GetCustomerWithOrdersHandler(context, new StubOrderHistory(orders), NullLogger<GetCustomerWithOrdersHandler>.Instance);
 
