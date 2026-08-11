@@ -9,7 +9,7 @@ namespace ShowRoom.Modules.Customer.Persistence;
 /// where the context is configured through Aspire's Npgsql integration. The connection string is read
 /// from configuration/environment — never hardcoded and never carrying a secret in source.
 /// <c>migrations add</c> does not connect, so the password-less local fallback is sufficient; provide
-/// real credentials via <c>ConnectionStrings__showroom-customers</c> (env) for design-time
+/// real credentials via <c>ConnectionStrings__showroom</c> (env) for design-time
 /// <c>database update</c>.
 /// </summary>
 public sealed class CustomerDbContextFactory : IDesignTimeDbContextFactory<CustomersContext>
@@ -24,9 +24,9 @@ public sealed class CustomerDbContextFactory : IDesignTimeDbContextFactory<Custo
             .Build();
 
         var connectionString =
-            configuration.GetConnectionString("showroom-customers")
+            configuration.GetConnectionString("showroom")
             ?? configuration.GetConnectionString("Customers")
-            ?? "Host=localhost;Port=5432;Database=customerdb;Username=postgres";
+            ?? "Host=localhost;Port=5432;Database=showroom;Username=postgres";
 
         var options = new DbContextOptionsBuilder<CustomersContext>()
             .UseNpgsql(connectionString)

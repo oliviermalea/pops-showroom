@@ -27,7 +27,7 @@ public class BusinessWebFactory<TEntryPoint> : WebApplicationFactory<TEntryPoint
 
     protected readonly PostgreSqlContainer _postgreSqlContainer = new PostgreSqlBuilder()
         .WithImage("postgres:16-alpine")
-        .WithDatabase("showroom-business")
+        .WithDatabase("showroom")
         .WithUsername("postgres")
         .WithPassword("postgres")
         .Build();

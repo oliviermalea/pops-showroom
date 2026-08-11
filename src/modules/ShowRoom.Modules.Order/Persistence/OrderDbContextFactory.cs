@@ -9,7 +9,7 @@ namespace ShowRoom.Modules.Order.Persistence;
 /// where the context is configured through the module's <see cref="DatabaseModule"/>. The connection
 /// string is read from configuration/environment — never hardcoded and never carrying a secret in
 /// source. <c>migrations add</c> does not connect, so the password-less local fallback is sufficient;
-/// provide real credentials via <c>ConnectionStrings__showroom-business</c> (env) for design-time
+/// provide real credentials via <c>ConnectionStrings__showroom</c> (env) for design-time
 /// <c>database update</c>.
 /// </summary>
 public sealed class OrderDbContextFactory : IDesignTimeDbContextFactory<OrdersContext>
@@ -24,9 +24,9 @@ public sealed class OrderDbContextFactory : IDesignTimeDbContextFactory<OrdersCo
             .Build();
 
         var connectionString =
-            configuration.GetConnectionString("showroom-business")
+            configuration.GetConnectionString("showroom")
             ?? configuration.GetConnectionString("Orders")
-            ?? "Host=localhost;Port=5432;Database=orderdb;Username=postgres";
+            ?? "Host=localhost;Port=5432;Database=showroom;Username=postgres";
 
         var options = new DbContextOptionsBuilder<OrdersContext>()
             .UseNpgsql(connectionString)

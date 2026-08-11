@@ -10,9 +10,9 @@ var postgres = builder.AddPostgres("postgres")
         c.WithImageTag("9.17");
     });
 
-// Database-per-service: each API owns its own database.
-var businessDb = postgres.AddDatabase("showroom-business");   // Order + Product
-var customerDb = postgres.AddDatabase("showroom-customers");  // Customer
+// Single shared database for the whole system; module isolation is enforced by a dedicated schema per
+// module (customers / orders / products) — logical separation, not physical databases.
+var showroomDb = postgres.AddDatabase("showroom");
 
 // RabbitMQ broker for machine-to-machine messaging (Wolverine AMQP request/reply).
 var messaging = builder.AddRabbitMQ("messaging")
@@ -22,8 +22,8 @@ var messaging = builder.AddRabbitMQ("messaging")
 builder.AddProject<Projects.ShowRoom_Business_Api>("showroom-business-api")
     .WithHttpEndpoint(port: 5204, name: "http")
     .WithHttpsEndpoint(port: 7106, name: "https")
-    .WithReference(businessDb)
-    .WaitFor(businessDb)
+    .WithReference(showroomDb)
+    .WaitFor(showroomDb)
     .WithReference(messaging)
     .WaitFor(messaging)
     .WithScalarUrl();
@@ -32,8 +32,8 @@ builder.AddProject<Projects.ShowRoom_Business_Api>("showroom-business-api")
 builder.AddProject<Projects.ShowRoom_Customer_Api>("showroom-customer-api")
     .WithHttpEndpoint(port: 5205, name: "http")
     .WithHttpsEndpoint(port: 7107, name: "https")
-    .WithReference(customerDb)
-    .WaitFor(customerDb)
+    .WithReference(showroomDb)
+    .WaitFor(showroomDb)
     .WithReference(messaging)
     .WaitFor(messaging)
     .WithScalarUrl();

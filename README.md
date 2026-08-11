@@ -30,7 +30,9 @@ détail d'un produit** — chaque capacité vivant dans un bounded context disti
 
 Le système est **distribué** : le bounded context *Customer* est extrait dans son propre service, qui
 dialogue avec le service *Business* (Order + Product) **uniquement via RabbitMQ** (request/reply
-Wolverine). Chaque service possède **sa propre base** (database-per-service).
+Wolverine). Les services partagent **une seule base PostgreSQL** (`showroom`) ; l'isolation entre
+modules est assurée par **un schéma dédié par module** (`customers`, `orders`, `products`) — séparation
+logique, pas physique.
 
 ```mermaid
 flowchart LR
@@ -45,8 +47,7 @@ flowchart LR
     end
 
     rabbit[[RabbitMQ<br/>messaging]]
-    cdb[(showroom-customers)]
-    bdb[(showroom-business)]
+    db[("showroom<br/>(schémas: customers / orders / products)")]
 
     client -->|HTTP /customers| cust
     client -->|HTTP /orders, /products| ord
@@ -56,9 +57,9 @@ flowchart LR
     ord -.->|OrdersForCustomerResponse| rabbit
     rabbit -.->|reply| cust
 
-    cust --- cdb
-    ord --- bdb
-    prod --- bdb
+    cust ---|schéma customers| db
+    ord ---|schéma orders| db
+    prod ---|schéma products| db
 ```
 
 - **`ShowRoom.Customer.Api`** — héberge le module Customer. **Producteur** du message : `GET
@@ -78,7 +79,7 @@ flowchart LR
 |---|---|
 | Runtime | .NET 10, C# / Minimal APIs (aucun MVC) |
 | Orchestration | .NET Aspire (AppHost + ServiceDefaults) |
-| Persistance | EF Core 10 + PostgreSQL (une base par service) |
+| Persistance | EF Core 10 + PostgreSQL (une base `showroom`, un schéma par module) |
 | Messaging M2M | RabbitMQ via **Wolverine** (AMQP request/reply, `IMessageBus.InvokeAsync`) |
 | Observabilité | OpenTelemetry (traces + métriques, export OTLP), Serilog (logs structurés) |
 | Identifiants | `StronglyTypedId` (Meziantou) en interne, `PublicId` (`prefix_guid`) exposé en HTTP |

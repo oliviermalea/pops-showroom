@@ -13,8 +13,8 @@ namespace ShowRoom.Modules.Customer.Persistence;
 public static class DatabaseModule
 {
     private const string ModuleConnectionStringName = "Customers";
-    // Database-per-service: the Customer service owns its own database (Aspire resource).
-    private const string AspireConnectionStringName = "showroom-customers";
+    // Single shared database (Aspire resource); the Customer module is isolated by its own schema.
+    private const string AspireConnectionStringName = "showroom";
 
     /// <summary>
     /// Adds the database module to the service collection.

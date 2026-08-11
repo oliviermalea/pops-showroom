@@ -14,7 +14,7 @@ namespace ShowRoom.Modules.Order.Persistence;
 public static class DatabaseModule
 {
     private const string ModuleConnectionStringName = "Orders";
-    private const string AspireConnectionStringName = "showroom-business";
+    private const string AspireConnectionStringName = "showroom";
 
     /// <summary>Adds the Order database context to the service collection.</summary>
     public static IServiceCollection AddDatabase(this IServiceCollection services, IConfiguration configuration)
