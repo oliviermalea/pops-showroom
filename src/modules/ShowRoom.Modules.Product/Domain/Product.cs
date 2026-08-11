@@ -76,7 +76,7 @@ public sealed class Product : AggregateRootWithPublicId<ProductId>, IAuditable
             return ProductErrors.InvalidPrice;
         }
 
-        var currencyResult = Currency.CreateOrDefault(currency);
+        var currencyResult = Currency.FromCodeOrDefault(currency);
         if (currencyResult.IsFailure)
         {
             return Result<Product>.Fail(currencyResult.Errors);

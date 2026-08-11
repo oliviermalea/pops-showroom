@@ -24,7 +24,7 @@ public sealed class GetProductByPublicIdAssemblerTests
             "Surf des mers",
             "Une planche légendaire",
             349.90m,
-            Currency.Create("EUR").Value,
+            Currency.Eur,
             ProductStatus.Discontinued,
             createdAt,
             updatedAt);

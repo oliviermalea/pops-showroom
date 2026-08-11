@@ -129,6 +129,71 @@
           "legendFormat": "{{order_currency}}"
         }
       ]
+    },
+    {
+      "type": "row",
+      "title": "Customers & funnel",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 13 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Customers registered (per minute)",
+      "description": "showroom.customers.registered — customer acquisition rate.",
+      "datasource": "${datasource}",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "fieldConfig": { "defaults": { "unit": "opm" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(showroom_customers_registered_total[$__rate_interval])) * 60",
+          "legendFormat": "registered"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Items per order (average & p95)",
+      "description": "showroom.orders.items — basket size in line items. Average = sum/count.",
+      "datasource": "${datasource}",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(showroom_orders_items_sum[$__rate_interval])) / clamp_min(sum(rate(showroom_orders_items_count[$__rate_interval])), 1e-9)",
+          "legendFormat": "avg items"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(showroom_orders_items_bucket[$__rate_interval])))",
+          "legendFormat": "p95 items"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Create rejections by reason (funnel quality)",
+      "description": "showroom.<entity>.create.rejected — rejected create attempts across modules, split by reason (validation / domain / conflict). A rising rate = something upstream is sending bad or conflicting data.",
+      "datasource": "${datasource}",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 22 },
+      "fieldConfig": { "defaults": { "unit": "cpm" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (reason) (rate(showroom_orders_create_rejected_total[$__rate_interval])) * 60",
+          "legendFormat": "order · {{reason}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (reason) (rate(showroom_products_create_rejected_total[$__rate_interval])) * 60",
+          "legendFormat": "product · {{reason}}"
+        },
+        {
+          "refId": "C",
+          "expr": "sum by (reason) (rate(showroom_customers_create_rejected_total[$__rate_interval])) * 60",
+          "legendFormat": "customer · {{reason}}"
+        }
+      ]
     }
   ]
 }

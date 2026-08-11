@@ -9,7 +9,7 @@ public static class GetOrderByPublicIdAssembler
         => new(
             PublicId: order.PublicId,
             CustomerPublicId: order.CustomerPublicId.Value,
-            Currency: order.Currency.Value,
+            Currency: order.Currency.Code,
             Status: order.Status.Value,
             OrderDate: order.CreatedAt,
             TotalAmount: order.TotalAmount,

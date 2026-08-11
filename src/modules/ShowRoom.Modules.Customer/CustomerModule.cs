@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using Asp.Versioning;
 using FluentValidation;
 using Microsoft.AspNetCore.Builder;
@@ -38,6 +39,9 @@ public static class CustomerModule
 
     /// <summary>Module ActivitySource; feature handlers open their spans from here.</summary>
     internal static readonly ActivitySource ActivitySource = new(TelemetrySourceName);
+
+    /// <summary>Module Meter for business metrics; register with <c>AddMeter(CustomerModule.TelemetrySourceName)</c>.</summary>
+    internal static readonly Meter Meter = new(TelemetrySourceName);
 
     public static string BuildApiBasePath(ApiVersion? version)
         => version is not null ? $"/api/v{version}{BaseRoute}" : $"/api{BaseRoute}";

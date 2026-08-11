@@ -38,7 +38,7 @@ internal sealed class OrderConfiguration : IEntityTypeConfiguration<OrderAggrega
         builder.HasIndex(order => order.CustomerPublicId);
 
         builder.Property(order => order.Currency)
-            .HasConversion(currency => currency.Value, value => Currency.Create(value).Value)
+            .HasConversion(currency => currency.Code, code => Currency.FromName(code))
             .HasMaxLength(3)
             .IsRequired();
 

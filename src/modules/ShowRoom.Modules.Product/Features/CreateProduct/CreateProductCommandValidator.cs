@@ -1,5 +1,5 @@
 using FluentValidation;
-using ShowRoom.BuildingBlocks.Application.Validations;
+using ShowRoom.SharedKernel.Currencies;
 
 namespace ShowRoom.Modules.Product.Features.CreateProduct;
 
@@ -19,7 +19,8 @@ internal sealed class CreateProductCommandValidator : AbstractValidator<CreatePr
             .GreaterThanOrEqualTo(0).WithMessage("Price must be non-negative.");
 
         RuleFor(x => x.Currency)
-            .MustBeSupportedCurrency()
+            .Must(Currency.IsValidCode)
+            .WithMessage("Currency must be a supported 3-letter uppercase ISO 4217 code (e.g. \"EUR\").")
             .When(x => !string.IsNullOrWhiteSpace(x.Currency));
     }
 }

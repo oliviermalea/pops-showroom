@@ -41,6 +41,7 @@ internal sealed class CreateOrderCommandHandler(
         {
             activity?.SetStatus(ActivityStatusCode.Error, "Validation failed");
             logger.LogWarning("Validation failed for create order request");
+            CreateOrderMetrics.RecordRejected("validation");
             return Result<PublicId>.Fail(validation.ToErrors());
         }
 
@@ -59,6 +60,7 @@ internal sealed class CreateOrderCommandHandler(
         {
             activity?.SetStatus(ActivityStatusCode.Error, "Domain rules rejected the order");
             logger.LogWarning("Order creation rejected by domain rules");
+            CreateOrderMetrics.RecordRejected("domain");
             return Result<PublicId>.Fail(orderResult.Errors);
         }
 
@@ -71,8 +73,8 @@ internal sealed class CreateOrderCommandHandler(
         activity?
             .SetTag("order.public_id", publicId.Value)
             .SetTag("order.total_amount", order.TotalAmount)
-            .SetTag("order.currency", order.Currency.Value);
-        CreateOrderMetrics.RecordCreated(order.TotalAmount, order.Currency.Value);
+            .SetTag("order.currency", order.Currency.Code);
+        CreateOrderMetrics.RecordCreated(order.TotalAmount, order.Currency.Code, order.Lines.Count);
         logger.LogInformation("Order created with public id {PublicId}", publicId.Value);
 
         return Result<PublicId>.Success(publicId);

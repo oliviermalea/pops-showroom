@@ -1,6 +1,6 @@
 using FluentValidation;
-using ShowRoom.BuildingBlocks.Application.Validations;
 using ShowRoom.BuildingBlocks.Domain.PublicIds;
+using ShowRoom.SharedKernel.Currencies;
 
 namespace ShowRoom.Modules.Order.Features.CreateOrder;
 
@@ -13,7 +13,8 @@ internal sealed class CreateOrderCommandValidator : AbstractValidator<CreateOrde
             .Must(PublicId.IsValid).WithMessage("Customer public id is not a valid public id.");
 
         RuleFor(x => x.Currency)
-            .MustBeSupportedCurrency()
+            .Must(Currency.IsValidCode)
+            .WithMessage("Currency must be a supported 3-letter uppercase ISO 4217 code (e.g. \"EUR\").")
             .When(x => !string.IsNullOrWhiteSpace(x.Currency));
 
         RuleFor(x => x.Lines)

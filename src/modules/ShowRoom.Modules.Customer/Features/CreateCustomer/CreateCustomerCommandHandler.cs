@@ -45,6 +45,7 @@ internal sealed class CreateCustomerCommandHandler(
         {
             activity?.SetStatus(ActivityStatusCode.Error, "Validation failed");
             logger.LogWarning("Validation failed for create customer request");
+            CreateCustomerMetrics.RecordRejected("validation");
             return Result<PublicId>.Fail(validation.ToErrors());
         }
 
@@ -52,6 +53,7 @@ internal sealed class CreateCustomerCommandHandler(
         if (emailResult.IsFailure)
         {
             activity?.SetStatus(ActivityStatusCode.Error, "Invalid email");
+            CreateCustomerMetrics.RecordRejected("validation");
             return Result<PublicId>.Fail(emailResult.Errors);
         }
 
@@ -64,6 +66,7 @@ internal sealed class CreateCustomerCommandHandler(
             if (phoneResult.IsFailure)
             {
                 activity?.SetStatus(ActivityStatusCode.Error, "Invalid phone number");
+                CreateCustomerMetrics.RecordRejected("validation");
                 return Result<PublicId>.Fail(phoneResult.Errors);
             }
 
@@ -77,6 +80,7 @@ internal sealed class CreateCustomerCommandHandler(
         {
             activity?.SetStatus(ActivityStatusCode.Error, "Email already exists");
             logger.LogWarning("A customer with the requested email already exists");
+            CreateCustomerMetrics.RecordRejected("conflict");
             return Result<PublicId>.Fail(CustomerErrors.EmailAlreadyExists);
         }
 
@@ -92,6 +96,7 @@ internal sealed class CreateCustomerCommandHandler(
 
         var publicId = CreateCustomerAssembler.From(customer);
         activity?.SetTag("customer.public_id", publicId.Value);
+        CreateCustomerMetrics.RecordRegistered();
         logger.LogInformation("Customer created with public id {PublicId}", publicId.Value);
 
         return Result<PublicId>.Success(publicId);

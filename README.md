@@ -85,7 +85,7 @@ flowchart LR
 | Identifiants | `StronglyTypedId` (Meziantou) en interne, `PublicId` (`prefix_guid`) exposé en HTTP |
 | Résultats | `Result`/`Error` + `ErrorCategory` (SmartEnum) → ProblemDetails, plutôt que des exceptions |
 | Erreurs HTTP | RFC 7807 uniforme ; corps JSON malformé → `400` propre (`BadRequestExceptionHandler` + `UseExceptionHandler`), jamais de stack trace |
-| Validation | FluentValidation ; devise validée ISO 4217 (`MustBeSupportedCurrency`) |
+| Validation | FluentValidation ; devise = `Currency` **SmartEnum** ISO 4217 (`Currency.IsValidCode` au boundary, `Currency.FromCode` au domaine) |
 | DI | Scrutor (scan des handlers) |
 | Versioning API | Asp.Versioning (`/api/v{version}`) |
 | Feature flags | Microsoft.FeatureManagement (`FeatureManagement:<Module>`) |
@@ -131,7 +131,7 @@ Pops-ShowRoom.slnx
 │  │  ├─ ShowRoom.Modules.Order.Contracts   # messages AMQP partagés (contrat inter-service)
 │  │  └─ ShowRoom.Modules.Product      # bounded context Product
 │  ├─ buildingblocks/ShowRoom.BuildingBlocks  # primitives DDD, Result, PublicId, observabilité, pagination
-│  └─ sharedkernel/ShowRoom.SharedKernel      # value objects partagés (Email, PhoneNumber, Currency)
+│  └─ sharedkernel/ShowRoom.SharedKernel      # types partagés : VO (Email, PhoneNumber) + SmartEnum Currency (ISO 4217)
 └─ tests/
    ├─ ShowRoom.Testing                        # harnais d'intégration (Testcontainers, factory générique)
    ├─ ShowRoom.Architecture.Tests             # tests de frontières (ArchUnitNET)
@@ -262,27 +262,36 @@ taux d'échec, round-trip p95 par feature, **retries (cold-start)** ; variable `
 
 ### Métriques métier (Orders)
 
-KPIs domaine (pas des timings d'infra), émis sur le Meter du module `ShowRoom.Modules.Order` (enregistré
-via `AddMeter(OrderModule.TelemetrySourceName)`), depuis le handler `CreateOrder` :
+KPIs domaine (pas des timings d'infra), émis sur le **Meter de chaque module** (`ShowRoom.Modules.<Module>`,
+enregistré via `AddMeter(<Module>.TelemetrySourceName)`), depuis les handlers `Create*` — pattern : Meter
+de module + helper `*Metrics` co-localisé dans le slice.
 
-| Instrument (OTel) | Type | Tags | Mesure |
-|---|---|---|---|
-| `showroom.orders.created` | Counter · `{order}` | `order.currency` | nombre de commandes créées (taux = commandes/s) |
-| `showroom.orders.amount` | Histogram | `order.currency` | total d'une commande ; `sum/count` = **panier moyen**, buckets = distribution |
+| Instrument (OTel) | Module | Type | Tags | Mesure |
+|---|---|---|---|---|
+| `showroom.orders.created` | Order | Counter · `{order}` | `order.currency` | commandes créées (taux = commandes/s) |
+| `showroom.orders.amount` | Order | Histogram | `order.currency` | total d'une commande ; `sum/count` = **panier moyen** (€), buckets = distribution |
+| `showroom.orders.items` | Order | Histogram · `{item}` | — | nb d'articles/commande ; `sum/count` = **panier moyen en articles** |
+| `showroom.customers.registered` | Customer | Counter · `{customer}` | — | clients inscrits (**acquisition**) |
+| `showroom.<entity>.create.rejected` | Order · Product · Customer | Counter · `{rejection}` | `reason` (`validation`/`domain`/`conflict`) | créations **rejetées** — qualité du funnel |
 
 ```promql
-# Panier moyen (montant moyen) par devise
+# Panier moyen (€) par devise
 sum by (order_currency) (rate(showroom_orders_amount_sum[$__rate_interval]))
 / sum by (order_currency) (rate(showroom_orders_amount_count[$__rate_interval]))
 
-# Commandes créées par minute
-sum(rate(showroom_orders_created_total[$__rate_interval])) * 60
+# Panier moyen en articles
+sum(rate(showroom_orders_items_sum[$__rate_interval])) / sum(rate(showroom_orders_items_count[$__rate_interval]))
+
+# Clients inscrits / minute
+sum(rate(showroom_customers_registered_total[$__rate_interval])) * 60
+
+# Rejets de création par module & raison
+sum by (reason) (rate(showroom_orders_create_rejected_total[$__rate_interval]))
 ```
 
 **Dashboard métier** : [`docs/observability/showroom-business.grafana.json`](docs/observability/showroom-business.grafana.json)
-— commandes créées/min, panier moyen, distribution du montant (p50/p95), totaux sur la période ;
-variable `currency`. Le pattern (Meter de module + helper `*Metrics` dans le slice) s'étend aux autres
-modules.
+— commandes créées/min, panier moyen (€ et articles), distribution du montant (p50/p95), clients
+inscrits/min, **rejets de création par raison** (les 3 modules), totaux sur la période ; variable `currency`.
 
 ---
 

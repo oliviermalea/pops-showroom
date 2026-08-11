@@ -23,7 +23,7 @@ public sealed class ProductTests
         sut.Value.Name.Should().Be("Surf des mers");
         sut.Value.Description.Should().Be("Une planche légendaire");
         sut.Value.Price.Should().Be(349.90m);
-        sut.Value.Currency.Value.Should().Be("EUR");
+        sut.Value.Currency.Code.Should().Be("EUR");
         sut.Value.Status.Should().Be(ProductStatus.Available);
         sut.Value.CreatedAt.Should().Be(createdAt);
         sut.Value.UpdatedAt.Should().BeNull();

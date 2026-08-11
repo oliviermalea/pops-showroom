@@ -30,7 +30,7 @@ public sealed class OrderTests
         sut.Value.Status.Should().Be(OrderStatus.Pending);
         sut.Value.PublicId.Prefix.Should().Be("ord");
         sut.Value.CustomerPublicId.Should().Be(customerPublicId);
-        sut.Value.Currency.Value.Should().Be("EUR");
+        sut.Value.Currency.Code.Should().Be("EUR");
         sut.Value.Lines.Should().HaveCount(2);
         sut.Value.TotalAmount.Should().Be(25.5m);
     }

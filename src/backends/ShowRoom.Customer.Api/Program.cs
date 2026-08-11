@@ -64,7 +64,8 @@ builder.Services.AddOpenTelemetry()
         .AddSource(WolverineObservability.RabbitMqSubscriberSourceName))
     .WithMetrics(metrics => metrics
         .AddMeter(WolverineObservability.MeterNamePattern)
-        .AddMeter(MessagingMetrics.MeterName));
+        .AddMeter(MessagingMetrics.MeterName)
+        .AddMeter(CustomerModule.TelemetrySourceName));
 
 var app = builder.Build();
 

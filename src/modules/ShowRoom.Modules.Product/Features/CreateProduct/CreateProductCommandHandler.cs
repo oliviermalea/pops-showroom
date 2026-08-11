@@ -41,6 +41,7 @@ internal sealed class CreateProductCommandHandler(
         {
             activity?.SetStatus(ActivityStatusCode.Error, "Validation failed");
             logger.LogWarning("Validation failed for create product request");
+            CreateProductMetrics.RecordRejected("validation");
             return Result<PublicId>.Fail(validation.ToErrors());
         }
 
@@ -55,6 +56,7 @@ internal sealed class CreateProductCommandHandler(
         {
             activity?.SetStatus(ActivityStatusCode.Error, "Domain rules rejected the product");
             logger.LogWarning("Product creation rejected by domain rules");
+            CreateProductMetrics.RecordRejected("domain");
             return Result<PublicId>.Fail(productResult.Errors);
         }
 

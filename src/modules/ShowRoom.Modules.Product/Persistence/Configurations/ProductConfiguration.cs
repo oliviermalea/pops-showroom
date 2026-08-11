@@ -33,7 +33,7 @@ internal sealed class ProductConfiguration : IEntityTypeConfiguration<ProductAgg
 
         builder.Property(product => product.Price).HasColumnType("numeric(18,2)").IsRequired();
         builder.Property(product => product.Currency)
-            .HasConversion(currency => currency.Value, value => Currency.Create(value).Value)
+            .HasConversion(currency => currency.Code, code => Currency.FromName(code))
             .HasMaxLength(3)
             .IsRequired();
 

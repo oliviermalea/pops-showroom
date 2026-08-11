@@ -10,7 +10,7 @@ public static class GetOrdersAssembler
             PublicId: order.PublicId,
             CustomerPublicId: order.CustomerPublicId.Value,
             Status: order.Status.Value,
-            Currency: order.Currency.Value,
+            Currency: order.Currency.Code,
             TotalAmount: order.TotalAmount,
             ItemCount: order.Lines.Count,
             OrderDate: order.CreatedAt);

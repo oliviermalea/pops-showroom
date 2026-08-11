@@ -10,8 +10,13 @@ namespace ShowRoom.Modules.Order.Features.CreateOrder;
 /// <item><c>showroom.orders.created</c> — counter of created orders (rate = orders/sec).</item>
 /// <item><c>showroom.orders.amount</c> — histogram of order totals; <c>sum/count</c> gives the average
 /// order value, and the buckets give the value distribution.</item>
+/// <item><c>showroom.orders.items</c> — histogram of line-item count per order; <c>sum/count</c> gives
+/// the average basket size in items.</item>
+/// <item><c>showroom.orders.create.rejected</c> — counter of rejected creations, tagged by
+/// <c>reason</c> (validation / domain).</item>
 /// </list>
-/// Both are tagged by <c>order.currency</c> so amounts are never summed across currencies.
+/// The value/created metrics are tagged by <c>order.currency</c> so amounts are never summed across
+/// currencies.
 /// </summary>
 internal static class CreateOrderMetrics
 {
@@ -24,10 +29,24 @@ internal static class CreateOrderMetrics
         "showroom.orders.amount",
         description: "Monetary total of a created order, in its own currency.");
 
-    public static void RecordCreated(decimal totalAmount, string currency)
+    private static readonly Histogram<int> OrderItems = OrderModule.Meter.CreateHistogram<int>(
+        "showroom.orders.items",
+        unit: "{item}",
+        description: "Number of line items in a created order.");
+
+    private static readonly Counter<long> Rejected = OrderModule.Meter.CreateCounter<long>(
+        "showroom.orders.create.rejected",
+        unit: "{rejection}",
+        description: "Order creations rejected, by reason.");
+
+    public static void RecordCreated(decimal totalAmount, string currency, int itemCount)
     {
         var tags = new TagList { { "order.currency", currency } };
         OrdersCreated.Add(1, tags);
         OrderAmount.Record((double)totalAmount, tags);
+        OrderItems.Record(itemCount);
     }
+
+    public static void RecordRejected(string reason)
+        => Rejected.Add(1, new TagList { { "reason", reason } });
 }

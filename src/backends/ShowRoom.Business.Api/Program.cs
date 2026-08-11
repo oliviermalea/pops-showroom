@@ -70,7 +70,8 @@ builder.Services.AddOpenTelemetry()
     .WithMetrics(metrics => metrics
         .AddMeter(WolverineObservability.MeterNamePattern)
         .AddMeter(MessagingMetrics.MeterName)
-        .AddMeter(OrderModule.TelemetrySourceName));
+        .AddMeter(OrderModule.TelemetrySourceName)
+        .AddMeter(ProductModule.TelemetrySourceName));
 
 var app = builder.Build();
 

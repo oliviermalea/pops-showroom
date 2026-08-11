@@ -1,54 +1,68 @@
-using ShowRoom.BuildingBlocks.Application.Validations;
+using Ardalis.SmartEnum;
 using ShowRoom.BuildingBlocks.Results;
 
 namespace ShowRoom.SharedKernel.Currencies;
 
 /// <summary>
-/// Validated ISO 4217 currency value object. Normalised to a trimmed, uppercase 3-letter code and
-/// validated against the supported set (<see cref="Currencies"/>). Creation failures are returned as an
-/// <see cref="Error"/> rather than thrown — invalid input never produces a <see cref="Currency"/>.
-/// Adapted from the PerpetualOps <c>Money</c> shared-kernel value object, narrowed to the currency
-/// concept and hardened with the curated ISO 4217 set.
+/// Supported ISO 4217 currency, modelled as a <see cref="SmartEnum{TEnum}"/> (never a raw <c>enum</c>).
+/// <see cref="SmartEnum{TEnum}.Name"/> is the 3-letter alphabetic code (e.g. <c>"EUR"</c>, exposed as
+/// <see cref="Code"/>) and <see cref="SmartEnum{TEnum}.Value"/> is the ISO 4217 numeric code (e.g. 978).
+/// The set here is the single source of truth — persisted as its <see cref="Code"/> via an EF value
+/// converter, validated at the API boundary with <see cref="IsValidCode"/>, and resolved in the domain
+/// with <see cref="FromCode"/> / <see cref="FromCodeOrDefault"/> (no lookup table — this lives in code).
 /// </summary>
-public sealed record Currency
+public sealed class Currency : SmartEnum<Currency>
 {
-    /// <summary>The system default currency (EUR), used when a caller omits the currency.</summary>
-    public static readonly Currency Default = new("EUR");
+    public static readonly Currency Eur = new("EUR", 978);
+    public static readonly Currency Usd = new("USD", 840);
+    public static readonly Currency Gbp = new("GBP", 826);
+    public static readonly Currency Jpy = new("JPY", 392);
+    public static readonly Currency Chf = new("CHF", 756);
+    public static readonly Currency Cad = new("CAD", 124);
+    public static readonly Currency Aud = new("AUD", 36);
+    public static readonly Currency Cny = new("CNY", 156);
+    public static readonly Currency Sek = new("SEK", 752);
+    public static readonly Currency Nok = new("NOK", 578);
 
-    private Currency(string value) => Value = value;
+    /// <summary>
+    /// Default currency used when a caller omits the currency (EUR). A property, NOT a static field:
+    /// SmartEnum reflects over static fields to build its set, so a second field pointing at EUR would
+    /// register the code twice ("An item with the same key has already been added").
+    /// </summary>
+    public static Currency Default => Eur;
 
-    /// <summary>The canonical uppercase 3-letter ISO 4217 code (e.g. <c>"EUR"</c>).</summary>
-    public string Value { get; }
-
-    /// <summary>Creates a currency from a raw code, failing when it is not a supported ISO 4217 code.</summary>
-    public static Result<Currency> Create(string? value)
+    private Currency(string name, int value) : base(name, value)
     {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return CurrencyErrors.Invalid(value);
-        }
-
-        var normalized = Normalize(value);
-
-        if (!IsoCurrencies.IsSupported(normalized))
-        {
-            return CurrencyErrors.Invalid(value);
-        }
-
-        return Result<Currency>.Success(new Currency(normalized));
     }
 
-    /// <summary>Creates the currency, or falls back to <see cref="Default"/> when none is provided.</summary>
-    public static Result<Currency> CreateOrDefault(string? value)
-        => string.IsNullOrWhiteSpace(value) ? Result<Currency>.Success(Default) : Create(value);
+    /// <summary>The ISO 4217 alphabetic code (alias of <see cref="SmartEnum{TEnum}.Name"/>, e.g. <c>"EUR"</c>).</summary>
+    public string Code => Name;
 
-    /// <summary>Returns <c>true</c> when <paramref name="value"/> normalises to a supported ISO 4217 code.</summary>
-    public static bool IsValid(string? value) =>
-        !string.IsNullOrWhiteSpace(value) && IsoCurrencies.IsSupported(Normalize(value));
+    /// <summary>
+    /// Strict boundary check: <c>true</c> only for an exact, uppercase supported code. Rejects malformed
+    /// casing (<c>"Eur"</c>) and unknown codes — used by API validators.
+    /// </summary>
+    public static bool IsValidCode(string? code) =>
+        code is not null && TryFromName(code, out _);
 
-    public static string Normalize(string value) => value.Trim().ToUpperInvariant();
+    /// <summary>
+    /// Tolerant domain resolution: trims and upper-cases before matching, returning an <see cref="Error"/>
+    /// (never throwing) for an unknown or blank code.
+    /// </summary>
+    public static Result<Currency> FromCode(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code)
+            || !TryFromName(code.Trim().ToUpperInvariant(), out var currency))
+        {
+            return CurrencyErrors.Invalid(code);
+        }
 
-    public override string ToString() => Value;
+        return Result<Currency>.Success(currency);
+    }
 
-    public static implicit operator string(Currency currency) => currency.Value;
+    /// <summary>Resolves the code, or falls back to <see cref="Default"/> when none is provided.</summary>
+    public static Result<Currency> FromCodeOrDefault(string? code)
+        => string.IsNullOrWhiteSpace(code) ? Result<Currency>.Success(Default) : FromCode(code);
+
+    public static implicit operator string(Currency currency) => currency.Name;
 }

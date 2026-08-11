@@ -73,7 +73,7 @@ public sealed class Order : AggregateRootWithPublicId<OrderId>, IAuditable
             return OrderErrors.NoLines;
         }
 
-        var currencyResult = Currency.CreateOrDefault(currency);
+        var currencyResult = Currency.FromCodeOrDefault(currency);
         if (currencyResult.IsFailure)
         {
             return Result<Order>.Fail(currencyResult.Errors);
