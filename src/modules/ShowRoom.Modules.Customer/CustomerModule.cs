@@ -12,10 +12,12 @@ using ShowRoom.BuildingBlocks;
 using ShowRoom.BuildingBlocks.Application;
 using ShowRoom.BuildingBlocks.Messaging;
 using ShowRoom.BuildingBlocks.Time;
+using ShowRoom.Modules.Customer.Features.ChangeCustomerEmail;
 using ShowRoom.Modules.Customer.Features.CreateCustomer;
 using ShowRoom.Modules.Customer.Features.GetCustomerByPublicId;
 using ShowRoom.Modules.Customer.Features.GetCustomers;
 using ShowRoom.Modules.Customer.Features.GetCustomerWithOrders;
+using ShowRoom.Modules.Customer.Features.UpdateCustomerProfile;
 using ShowRoom.Modules.Customer.Persistence;
 using Wolverine;
 
@@ -79,6 +81,8 @@ public static class CustomerModule
         group.MapGetCustomers();
         group.MapGetCustomerWithOrders();
         group.MapGetCustomerByPublicId();
+        group.MapChangeCustomerEmail();
+        group.MapUpdateCustomerProfile();
 
         return endpoints;
     }

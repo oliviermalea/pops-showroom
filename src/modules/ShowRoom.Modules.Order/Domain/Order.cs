@@ -110,7 +110,15 @@ public sealed class Order : AggregateRootWithPublicId<OrderId>, IAuditable
         return Result<Order>.Success(order);
     }
 
-    /// <summary>Rehydrates an aggregate from already-persisted state (used by EF).</summary>
+    /// <summary>
+    /// Domain-owned rehydration factory: reconstitutes an EXISTING aggregate from already-validated,
+    /// persisted state — reusing the stored identity, accepting the stored status/timestamps, and raising
+    /// NO creation events (reloading is not re-creating). This is the sanctioned way to rebuild the
+    /// aggregate outside <see cref="Create"/>, independent of any persistence mechanism. NOTE: EF Core
+    /// materialises via the private constructor, so it does not call this — it is exercised by tests and
+    /// is the seam for any non-EF rehydration (import/migration, snapshot/cache, event replay). Feed it
+    /// only trusted, already-valid state (it deliberately skips creation invariants).
+    /// </summary>
     public static Order Restore(
         OrderId id,
         PublicId publicId,

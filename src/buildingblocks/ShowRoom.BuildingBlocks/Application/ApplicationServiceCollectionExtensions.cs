@@ -25,6 +25,12 @@ public static class ApplicationServiceCollectionExtensions
             .AsImplementedInterfaces()
             .WithScopedLifetime());
 
+        services.Scan(scan => scan
+            .FromAssemblies(assembly)
+            .AddClasses(classes => classes.AssignableTo(typeof(IDomainEventHandler<>)), publicOnly: false)
+            .AsImplementedInterfaces()
+            .WithScopedLifetime());
+
         return services;
     }
 }

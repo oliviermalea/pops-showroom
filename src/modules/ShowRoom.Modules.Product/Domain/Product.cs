@@ -94,7 +94,14 @@ public sealed class Product : AggregateRootWithPublicId<ProductId>, IAuditable
             updatedAt: null));
     }
 
-    /// <summary>Rehydrates an aggregate from already-persisted state (used by EF).</summary>
+    /// <summary>
+    /// Domain-owned rehydration factory: reconstitutes an EXISTING aggregate from already-validated,
+    /// persisted state — reusing the stored identity, accepting the stored status/timestamps, and raising
+    /// NO creation events (reloading is not re-creating). This is the sanctioned way to rebuild the
+    /// aggregate outside <see cref="Create"/>, independent of any persistence mechanism. NOTE: EF Core
+    /// materialises via the private constructor, so it does not call this — it is exercised by tests and
+    /// is the seam for any non-EF rehydration (event replay, snapshot, another store).
+    /// </summary>
     public static Product Restore(
         ProductId id,
         PublicId publicId,

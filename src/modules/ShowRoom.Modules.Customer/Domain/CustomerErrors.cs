@@ -14,4 +14,8 @@ public static class CustomerErrors
     public static readonly Error EmailAlreadyExists = Error.Conflict(
         "Customer.EmailAlreadyExists",
         "A customer with this email already exists.");
+
+    public static readonly Error NameRequired = Error.Validation(
+        "Customer.NameRequired",
+        "A customer must have a first and last name.");
 }

@@ -78,4 +78,39 @@ public sealed class OrderTests
         sut.IsFailure.Should().BeTrue();
         sut.Errors.Should().Contain(OrderErrors.InvalidUnitPrice);
     }
+
+    [Fact]
+    public void Restore_rehydrates_state_without_regenerating_identity_or_raising_events()
+    {
+        // Arrange — an order as it would come back from the store: known id/dates, an advanced status.
+        var id = OrderId.FromGuid(Guid.CreateVersion7());
+        var publicId = PublicIdFactory.ForOrder().Value;
+        var customerPublicId = NewCustomerId();
+        var createdAt = DateTimeOffset.UtcNow.AddDays(-3);
+        var updatedAt = DateTimeOffset.UtcNow.AddDays(-1);
+        var line = OrderLine.Create(NewProductId(), "Kayak", 2, 10m).Value;
+
+        // Act
+        var sut = OrderAggregate.Restore(
+            id,
+            publicId,
+            customerPublicId,
+            Currency.Eur,
+            OrderStatus.Paid,
+            [line],
+            createdAt,
+            updatedAt);
+
+        // Assert — identity & history preserved (not regenerated), lines rehydrated, no events raised.
+        sut.Id.Should().Be(id);
+        sut.PublicId.Should().Be(publicId);
+        sut.CustomerPublicId.Should().Be(customerPublicId);
+        sut.Currency.Should().Be(Currency.Eur);
+        sut.Status.Should().Be(OrderStatus.Paid);
+        sut.CreatedAt.Should().Be(createdAt);
+        sut.UpdatedAt.Should().Be(updatedAt);
+        sut.Lines.Should().ContainSingle();
+        sut.TotalAmount.Should().Be(20m);
+        sut.DomainEvents.Should().BeEmpty();
+    }
 }

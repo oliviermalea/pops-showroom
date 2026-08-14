@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using ShowRoom.BuildingBlocks.Persistence;
 
 namespace ShowRoom.Modules.Customer.Persistence;
 
@@ -30,7 +31,9 @@ public static class DatabaseModule
 
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
 
-        //services.AddAuditingInterceptor();
+        // Domain events are dispatched by an EF interceptor after commit — the DbContext stays free of
+        // any event logic (see DomainEventDispatchInterceptor).
+        services.AddDomainEventDispatch();
 
         services.AddDbContext<CustomersContext>((provider, options) =>
         {
@@ -43,7 +46,7 @@ public static class DatabaseModule
                 options.EnableDetailedErrors();
             }
 
-            //options.AddInterceptors(provider.GetRequiredService<AuditingSaveChangesInterceptor>());
+            options.AddInterceptors(provider.GetRequiredService<DomainEventDispatchInterceptor>());
         });
 
         return services;

@@ -229,6 +229,12 @@ Before implementation, define:
 - Integration Events: external/module-to-module/system contracts
 - Breaking event changes => create a new event version + temporary coexistence
 
+### 3.3.1 Domain event dispatch (mandatory)
+- Aggregates **raise** domain events through the `Entity` base (`RaiseDomainEvent`), from intention-revealing behaviour methods — never from persistence or handlers.
+- Domain events are **dispatched by an EF Core `SaveChangesInterceptor`** (`ShowRoom.BuildingBlocks.Persistence.DomainEventDispatchInterceptor`), **never** by the `DbContext` (no `SaveChanges` override, no event logic in the context) and **never** by the command handler. The DbContext stays free of event concerns.
+- The interceptor runs in **`SavedChangesAsync` (AFTER commit)**, collects + clears events from the change tracker via `IHasDomainEvents`, and invokes `IDomainEventHandler<T>` resolved from DI. It is **best-effort** (a handler throwing is logged, not rethrown — the transaction is already committed) and **must not write to the DbContext**. Wire it via `services.AddDomainEventDispatch()` + `options.AddInterceptors(sp.GetRequiredService<DomainEventDispatchInterceptor>())` in `DatabaseModule.AddDatabase`; handlers are discovered by `AddApplicationHandlersFromAssembly` (Scrutor scan of `IDomainEventHandler<>`). Test factories that repoint the DbContext MUST re-attach the interceptor so the test host matches production.
+- This gives **at-most-once, in-process** semantics — fine for internal reactions. Anything requiring **guaranteed cross-service delivery** is an **Integration Event** published through Wolverine's transactional **outbox** (which DOES write to the DB, in the same transaction); the "never write to the DbContext" rule scopes to the domain-event interceptor, not the outbox.
+
 ### 3.4 Machine-to-machine messaging (AMQP / Wolverine) — mandatory
 Cross-module (and future cross-service) data exchange goes over **RabbitMQ via Wolverine**, never HTTP.
 
