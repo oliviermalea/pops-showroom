@@ -26,8 +26,8 @@ public sealed class CustomerModuleBoundaryTests
     [Fact]
     public void Domain_should_not_depend_on_persistence()
     {
-        IArchRule rule = Types().That().ResideInNamespace(DomainNamespace, true)
-            .Should().NotDependOnAny(Types().That().ResideInNamespace(PersistenceNamespace, true));
+        IArchRule rule = Types().That().ResideInNamespaceMatching(DomainNamespace)
+            .Should().NotDependOnAny(Types().That().ResideInNamespaceMatching(PersistenceNamespace));
 
         rule.Check(Arch);
     }
@@ -35,8 +35,8 @@ public sealed class CustomerModuleBoundaryTests
     [Fact]
     public void Domain_should_not_depend_on_features()
     {
-        IArchRule rule = Types().That().ResideInNamespace(DomainNamespace, true)
-            .Should().NotDependOnAny(Types().That().ResideInNamespace(FeaturesNamespace, true));
+        IArchRule rule = Types().That().ResideInNamespaceMatching(DomainNamespace)
+            .Should().NotDependOnAny(Types().That().ResideInNamespaceMatching(FeaturesNamespace));
 
         rule.Check(Arch);
     }
@@ -44,8 +44,8 @@ public sealed class CustomerModuleBoundaryTests
     [Fact]
     public void Persistence_should_not_depend_on_features()
     {
-        IArchRule rule = Types().That().ResideInNamespace(PersistenceNamespace, true)
-            .Should().NotDependOnAny(Types().That().ResideInNamespace(FeaturesNamespace, true));
+        IArchRule rule = Types().That().ResideInNamespaceMatching(PersistenceNamespace)
+            .Should().NotDependOnAny(Types().That().ResideInNamespaceMatching(FeaturesNamespace));
 
         rule.Check(Arch);
     }

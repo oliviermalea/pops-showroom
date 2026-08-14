@@ -171,7 +171,8 @@ identifiées par leur **`PublicId`** (jamais l'identifiant technique).
 | `GET` | `/api/v1/customers/{publicId}` | Détail d'un client | `200` · `400` · `404` |
 | `GET` | `/api/v1/customers/{publicId}/with-orders` | Client + historique de commandes (récupéré via AMQP) | `200` (avec `ordersAvailable`) · `400` · `404` |
 | `PATCH` | `/api/v1/customers/{publicId}/email` | Change l'email d'un client (lève `CustomerEmailChanged`) | `204` · `400` · `404` · `409` (email déjà pris) |
-| `PUT` | `/api/v1/customers/{publicId}` | Met à jour le profil (nom, email, téléphone) — orchestration task-based, events fins | `204` · `400` · `404` · `409` |
+| `PUT` | `/api/v1/customers/{publicId}` | Met à jour le profil — **Style 1** task-based, events fins (`CustomerRenamed`/`…EmailChanged`/`…PhoneChanged`) | `204` · `400` · `404` · `409` |
+| `PUT` | `/api/v1/customers/{publicId}/profile` | Met à jour le profil — **Style 2** coarse, un seul `CustomerProfileUpdated` (+ `ChangedFields`) | `204` · `400` · `404` · `409` |
 
 ### ShowRoom.Business.Api
 

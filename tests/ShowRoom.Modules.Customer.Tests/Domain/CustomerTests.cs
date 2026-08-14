@@ -110,4 +110,61 @@ public sealed class CustomerTests
         sut.UpdatedAt.Should().BeNull();
         sut.DomainEvents.Should().BeEmpty();
     }
+
+    // ---- Style 2 (coarse) : UpdateProfile + single CustomerProfileUpdated event ----
+
+    [Fact]
+    public void UpdateProfile_applies_all_fields_and_raises_a_single_coarse_event()
+    {
+        var sut = NewCustomer("old@example.com"); // Grace Hopper, no phone
+        var now = DateTimeOffset.UtcNow.AddMinutes(1);
+
+        var result = sut.UpdateProfile(
+            "Ada", "Lovelace",
+            Email.Create("new@example.com").Value,
+            PhoneNumber.Create("+33123456789").Value,
+            now);
+
+        result.IsSuccess.Should().BeTrue();
+        sut.DisplayName.Should().Be("Ada Lovelace");
+        sut.Email.Value.Should().Be("new@example.com");
+        sut.Phone!.Value.Should().Be("+33123456789");
+        sut.UpdatedAt.Should().Be(now);
+
+        sut.DomainEvents.Should().ContainSingle(e => e is CustomerProfileUpdated); // ONE event, not three
+        sut.DomainEvents.OfType<CustomerProfileUpdated>().Single()
+            .ChangedFields.Should().BeEquivalentTo(["Name", "Email", "Phone"]);
+    }
+
+    [Fact]
+    public void UpdateProfile_reports_only_the_fields_that_changed()
+    {
+        var sut = NewCustomer("grace@example.com"); // Grace Hopper
+
+        var result = sut.UpdateProfile(
+            "Grace", "Hopper", // unchanged
+            Email.Create("new@example.com").Value, // changed
+            phone: null,
+            DateTimeOffset.UtcNow);
+
+        result.IsSuccess.Should().BeTrue();
+        sut.DomainEvents.OfType<CustomerProfileUpdated>().Single()
+            .ChangedFields.Should().BeEquivalentTo(["Email"]);
+    }
+
+    [Fact]
+    public void UpdateProfile_is_idempotent_when_nothing_changes()
+    {
+        var sut = NewCustomer("grace@example.com"); // Grace Hopper, no phone
+
+        var result = sut.UpdateProfile(
+            "Grace", "Hopper",
+            Email.Create("grace@example.com").Value,
+            phone: null,
+            DateTimeOffset.UtcNow);
+
+        result.IsSuccess.Should().BeTrue();
+        sut.UpdatedAt.Should().BeNull();
+        sut.DomainEvents.Should().BeEmpty();
+    }
 }

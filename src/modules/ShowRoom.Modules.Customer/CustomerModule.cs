@@ -18,6 +18,7 @@ using ShowRoom.Modules.Customer.Features.GetCustomerByPublicId;
 using ShowRoom.Modules.Customer.Features.GetCustomers;
 using ShowRoom.Modules.Customer.Features.GetCustomerWithOrders;
 using ShowRoom.Modules.Customer.Features.UpdateCustomerProfile;
+using ShowRoom.Modules.Customer.Features.UpdateCustomerProfileCoarse;
 using ShowRoom.Modules.Customer.Persistence;
 using Wolverine;
 
@@ -82,7 +83,8 @@ public static class CustomerModule
         group.MapGetCustomerWithOrders();
         group.MapGetCustomerByPublicId();
         group.MapChangeCustomerEmail();
-        group.MapUpdateCustomerProfile();
+        group.MapUpdateCustomerProfile();          // Style 1 — task-based, fine-grained events
+        group.MapUpdateCustomerProfileCoarse();    // Style 2 — one coarse CustomerProfileUpdated event
 
         return endpoints;
     }

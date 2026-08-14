@@ -159,6 +159,56 @@ public sealed class Customer : AggregateRootWithPublicId<CustomerId>, IAuditable
     }
 
     /// <summary>
+    /// "Style 2" coarse update: applies the whole editable profile in one call and raises a single
+    /// <see cref="CustomerProfileUpdated"/> (carrying the changed field names). Idempotent — if nothing
+    /// changes, it is a no-op that raises nothing. Contrast with the task-based <see cref="Rename"/> +
+    /// <see cref="ChangeEmail"/> + <see cref="ChangePhone"/> (Style 1), which raise fine-grained events.
+    /// </summary>
+    public Result UpdateProfile(string firstName, string lastName, Email email, PhoneNumber? phone, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(email);
+
+        if (string.IsNullOrWhiteSpace(firstName) || string.IsNullOrWhiteSpace(lastName))
+        {
+            return CustomerErrors.NameRequired;
+        }
+
+        var newFirstName = firstName.Trim();
+        var newLastName = lastName.Trim();
+
+        var changedFields = new List<string>(3);
+        if (FirstName != newFirstName || LastName != newLastName)
+        {
+            changedFields.Add("Name");
+        }
+
+        if (Email != email)
+        {
+            changedFields.Add("Email");
+        }
+
+        if (Phone?.Value != phone?.Value)
+        {
+            changedFields.Add("Phone");
+        }
+
+        if (changedFields.Count == 0)
+        {
+            return Result.Success();
+        }
+
+        FirstName = newFirstName;
+        LastName = newLastName;
+        Email = email;
+        Phone = phone;
+        UpdatedAt = now;
+
+        RaiseDomainEvent(new CustomerProfileUpdated(Guid.CreateVersion7(), Id, PublicId, changedFields));
+
+        return Result.Success();
+    }
+
+    /// <summary>
     /// Domain-owned rehydration factory: reconstitutes an EXISTING aggregate from already-validated,
     /// persisted state — reusing the stored identity, accepting the stored status/timestamps, and raising
     /// NO creation events (reloading is not re-creating). This is the sanctioned way to rebuild the

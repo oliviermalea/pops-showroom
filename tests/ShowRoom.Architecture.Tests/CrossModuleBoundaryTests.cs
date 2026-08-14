@@ -22,11 +22,11 @@ public sealed class CrossModuleBoundaryTests
     [Fact]
     public void Customer_should_not_depend_on_order_implementation()
     {
-        IArchRule rule = Types().That().ResideInNamespace("ShowRoom.Modules.Customer", true)
+        IArchRule rule = Types().That().ResideInNamespaceMatching("ShowRoom.Modules.Customer")
             .Should().NotDependOnAny(Types().That()
-                .ResideInNamespace("ShowRoom.Modules.Order.Domain", true)
-                .Or().ResideInNamespace("ShowRoom.Modules.Order.Features", true)
-                .Or().ResideInNamespace("ShowRoom.Modules.Order.Persistence", true));
+                .ResideInNamespaceMatching("ShowRoom.Modules.Order.Domain")
+                .Or().ResideInNamespaceMatching("ShowRoom.Modules.Order.Features")
+                .Or().ResideInNamespaceMatching("ShowRoom.Modules.Order.Persistence"));
 
         rule.Check(Arch);
     }
