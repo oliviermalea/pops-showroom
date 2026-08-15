@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using Npgsql;
 using Wolverine;
 using Wolverine.Postgresql;
 using Wolverine.RabbitMQ;
@@ -44,7 +45,23 @@ public static class WolverineMessagingExtensions
                 messageStoreConnectionString,
                 $"ConnectionStrings:{messaging.MessageStoreConnectionName}");
 
-            options.PersistMessagesWithPostgresql(messageStoreConnectionString, messaging.MessageStoreSchema);
+            // The Wolverine durability agents poll this store on timers; with Npgsql command tracing enabled
+            // each idle poll would emit an orphan span — a fresh trace every second in the dashboard even when
+            // nothing happens. Disable tracing on the store's OWN data source so idle polling is silent, while
+            // module DbContexts keep full query tracing (the atomic outbox write goes through the DbContext
+            // connection, not this data source, so it stays visible in the business trace).
+            var messageStoreDataSource = new NpgsqlDataSourceBuilder(messageStoreConnectionString)
+                .ConfigureTracing(tracing => tracing
+                    .ConfigureCommandFilter(_ => false)
+                    .ConfigureBatchFilter(_ => false))
+                .Build();
+
+            options.PersistMessagesWithPostgresql(messageStoreDataSource, messaging.MessageStoreSchema);
+
+            // Single instance per service in this topology: Solo mode skips the multi-node leadership /
+            // agent-assignment / health-check polling that Balanced mode runs several times a second. Switch
+            // back to Balanced when running multiple replicas of a service.
+            options.Durability.Mode = DurabilityMode.Solo;
         }
 
         if (messaging.UseDurableLocalQueues)
