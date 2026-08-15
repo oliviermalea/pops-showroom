@@ -20,6 +20,8 @@
 		<ProjectReference Include="..\..\buildingblocks\ShowRoom.BuildingBlocks\ShowRoom.BuildingBlocks.csproj" />
 		<ProjectReference Include="..\..\sharedkernel\ShowRoom.SharedKernel\ShowRoom.SharedKernel.csproj" />
 		<ProjectReference Include="..\ShowRoom.Modules.Order.Contracts\ShowRoom.Modules.Order.Contracts.csproj" />
+		<!-- Consumes the Customer module's IntegrationEvent contract (CustomerRegistered) over the bus. -->
+		<ProjectReference Include="..\ShowRoom.Modules.Customer.Contracts\ShowRoom.Modules.Customer.Contracts.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

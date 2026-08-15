@@ -23,6 +23,9 @@
 		<!-- Messaging building blocks: Wolverine transport configuration (ConfigureShowRoomMessaging). -->
 		<PackageReference Include="WolverineFx" />
 		<PackageReference Include="WolverineFx.RabbitMQ" />
+		<!-- Transactional outbox: Postgres message store (dedicated "wolverine" schema) + EF Core transaction integration. -->
+		<PackageReference Include="WolverineFx.PostgreSQL" />
+		<PackageReference Include="WolverineFx.EntityFrameworkCore" />
 	</ItemGroup>
 	
 </Project>

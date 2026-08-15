@@ -5,20 +5,33 @@ using Microsoft.Extensions.Logging;
 using ShowRoom.BuildingBlocks.Application;
 using ShowRoom.BuildingBlocks.Application.Validations;
 using ShowRoom.BuildingBlocks.Domain.PublicIds;
+using ShowRoom.BuildingBlocks.Messaging;
 using ShowRoom.BuildingBlocks.Observability.Logging;
 using ShowRoom.BuildingBlocks.Observability.Tracing;
 using ShowRoom.BuildingBlocks.Results;
 using ShowRoom.BuildingBlocks.Time;
+using ShowRoom.Modules.Customer.Contracts.Messaging;
 using ShowRoom.Modules.Customer.Domain;
 using ShowRoom.Modules.Customer.Persistence;
 using ShowRoom.SharedKernel.Emails;
 using ShowRoom.SharedKernel.PhoneNumbers;
+using Wolverine;
+using Wolverine.EntityFrameworkCore;
 using CustomerAggregate = ShowRoom.Modules.Customer.Domain.Customer;
 
 namespace ShowRoom.Modules.Customer.Features.CreateCustomer;
 
+/// <summary>
+/// Creates a customer and publishes <see cref="CustomerRegisteredIntegrationEvent"/> through Wolverine's
+/// transactional outbox. Uses <see cref="IDbContextOutbox{TContext}"/> over the SINGLE
+/// <see cref="CustomersContext"/> so the outgoing envelope is stored in the SAME database transaction as
+/// the customer insert (atomic) via
+/// <see cref="IDbContextOutbox{TContext}.SaveChangesAndFlushMessagesAsync(System.Threading.CancellationToken)"/>;
+/// a durable sending agent then delivers it to RabbitMQ with retries (guaranteed at-least-once). The
+/// Wolverine tables live in the dedicated <c>wolverine</c> schema of the same database.
+/// </summary>
 internal sealed class CreateCustomerCommandHandler(
-    CustomersContext context,
+    IDbContextOutbox<CustomersContext> outbox,
     IDateTimeProvider dateTimeProvider,
     IValidator<CreateCustomerCommand> validator,
     ILogger<CreateCustomerCommandHandler> logger)
@@ -73,6 +86,8 @@ internal sealed class CreateCustomerCommandHandler(
             phone = phoneResult.Value;
         }
 
+        var context = outbox.DbContext;
+
         var emailAlreadyExists = await context.Customers
             .AnyAsync(customer => customer.Email == email, cancellationToken);
 
@@ -92,13 +107,53 @@ internal sealed class CreateCustomerCommandHandler(
             dateTimeProvider.UtcNow);
 
         context.Customers.Add(customer);
-        await context.SaveChangesAsync(cancellationToken);
 
         var publicId = CreateCustomerAssembler.From(customer);
-        activity?.SetTag("customer.public_id", publicId.Value);
+
+        // Publish the IntegrationEvent through the transactional outbox: the envelope is persisted in the
+        // SAME transaction as the customer insert (atomic all-or-nothing), then a durable agent delivers it
+        // to RabbitMQ with retries. This is the sanctioned DbContext write for the outbox (see backend §3.3).
+        try
+        {
+            await outbox.PublishAsync(
+                new CustomerRegisteredIntegrationEvent(
+                    publicId.Value,
+                    customer.FirstName,
+                    customer.LastName,
+                    customer.Email.Value,
+                    customer.CreatedAt),
+                BuildOutboxDeliveryOptions(requestId));
+
+            await outbox.SaveChangesAndFlushMessagesAsync(cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            // The atomic write failed (store/DB unavailable) — nothing was committed. Mark the span and
+            // log so the failure is diagnosable, then let it surface as a 500 via the exception handler.
+            activity?.SetStatus(ActivityStatusCode.Error, "Outbox publish failed");
+            activity?.AddException(exception);
+            logger.LogError(exception, "Failed to persist and publish CustomerRegistered via the outbox");
+            throw;
+        }
+
+        activity?
+            .SetTag("customer.public_id", publicId.Value)
+            .SetTag("messaging.outbox.published", true);
         CreateCustomerMetrics.RecordRegistered();
-        logger.LogInformation("Customer created with public id {PublicId}", publicId.Value);
+        logger.LogInformation(
+            "Customer created with public id {PublicId}; CustomerRegistered integration event enqueued to the outbox",
+            publicId.Value);
 
         return Result<PublicId>.Success(publicId);
     }
+
+    private static DeliveryOptions BuildOutboxDeliveryOptions(string requestId)
+        => new DeliveryOptions()
+            .WithHeader(MessageHeaders.ModuleName, CustomerModule.ModuleName)
+            .WithHeader(MessageHeaders.FeatureName, FeatureName)
+            .WithHeader(MessageHeaders.MessageType, nameof(CustomerRegisteredIntegrationEvent))
+            .WithHeader(MessageHeaders.EventType, nameof(CustomerRegisteredIntegrationEvent))
+            .WithHeader(MessageHeaders.MessageId, Guid.NewGuid().ToString("N"))
+            .WithHeader(MessageHeaders.CorrelationId, requestId)
+            .WithHeader(MessageHeaders.TraceId, requestId);
 }

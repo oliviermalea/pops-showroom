@@ -2,37 +2,54 @@ namespace ShowRoom.Modules.Customer.IntegrationTests;
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using ShowRoom.BuildingBlocks.Persistence;
+using Microsoft.Extensions.Hosting;
 using ShowRoom.Modules.Customer.Persistence;
 using ShowRoom.Testing;
+using Wolverine.Runtime;
 
 /// <summary>
-/// Customer module test factory: repoints <see cref="CustomersContext"/> at the factory's isolated
-/// PostgreSQL container and migrates it, giving each run a clean, isolated database.
+/// Customer module test factory. Each test class gets its own throwaway PostgreSQL container
+/// (<c>_postgreSqlContainer</c>, owned and disposed by the base factory) — fully isolated from every other
+/// test and from any real database. The Customer module keeps a SINGLE <see cref="CustomersContext"/>: its
+/// business tables live in the <c>customers</c> schema and Wolverine's transactional-outbox tables in the
+/// <c>wolverine</c> schema of the SAME database (the outbox writes envelopes through the context's own
+/// connection, which is what makes the write atomic). Binding <c>ConnectionStrings:showroom</c> to the
+/// container through host configuration points both the DbContext and the Wolverine message store at that
+/// one isolated container. External transports are stubbed by the base factory
+/// (<c>DisableAllExternalWolverineTransports</c>), so the outbox persists and routes without a real broker;
+/// Wolverine storage is cleared on teardown (<c>ClearAllWolverineStorageAsync</c>).
 /// </summary>
 public sealed class CustomerBusinessWebFactory : BusinessWebFactory<Program>
 {
-    protected override void ConfigureModuleTestServices(IServiceCollection services)
+    private IHost? _host;
+
+    /// <summary>The ephemeral Testcontainers PostgreSQL connection string this factory binds everything to.</summary>
+    public string ContainerConnectionString => _postgreSqlContainer.GetConnectionString();
+
+    protected override IHost CreateHost(IHostBuilder builder)
     {
-        var descriptor = services.SingleOrDefault(
-            service => service.ServiceType == typeof(DbContextOptions<CustomersContext>));
-
-        if (descriptor is not null)
-        {
-            services.Remove(descriptor);
-        }
-
-        // Re-attach the domain-event dispatch interceptor so the test host matches production behaviour
-        // (repointing the DbContext at the container would otherwise drop it).
-        services.AddDbContext<CustomersContext>((provider, options) =>
-            options.UseNpgsql(_postgreSqlContainer.GetConnectionString())
-                .AddInterceptors(provider.GetRequiredService<DomainEventDispatchInterceptor>()));
+        _host = base.CreateHost(builder);
+        return _host;
     }
 
-    protected override void InitializeModuleTestServices(IServiceProvider serviceProvider)
+    protected override IDictionary<string, string?> HostConfigurationOverrides() => new Dictionary<string, string?>
     {
-        serviceProvider.GetRequiredService<CustomersContext>()
+        ["ConnectionStrings:showroom"] = _postgreSqlContainer.GetConnectionString(),
+    };
+
+    protected override void InitializeModuleTestServices(IServiceProvider serviceProvider)
+        => serviceProvider.GetRequiredService<CustomersContext>()
             .Database
             .Migrate();
+
+    public override async ValueTask DisposeAsync()
+    {
+        if (_host is not null)
+        {
+            // Clear Wolverine's inbox/outbox/dead-letter tables (recommended by the Wolverine testing guide).
+            await _host.ClearAllWolverineStorageAsync();
+        }
+
+        await base.DisposeAsync();
     }
 }

@@ -6,21 +6,14 @@ using AwesomeAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using ShowRoom.Modules.Customer;
 using ShowRoom.Modules.Customer.Features.CreateCustomer;
-using ShowRoom.Testing.Configuration;
-using ShowRoom.Testing.Database;
 using ShowRoom.Testing.Http;
 
-public class CreateCustomerEndpointTests(
-    CustomerBusinessWebFactory applicationInMemoryFactory,
-    DatabaseContainer database)
-    : IClassFixture<CustomerBusinessWebFactory>,
-      IClassFixture<DatabaseContainer>
+public class CreateCustomerEndpointTests(CustomerBusinessWebFactory applicationInMemoryFactory)
+    : IClassFixture<CustomerBusinessWebFactory>
 {
     private static readonly string CustomersRoute = $"/api/v1/{CustomerModule.RouteSegment}";
 
-    private WebApplicationFactory<Program> ConfiguredFactory =>
-        applicationInMemoryFactory
-            .WithContainerDatabaseConfigured(new CustomerDatabaseConfiguration(database.ConnectionString!));
+    private WebApplicationFactory<Program> ConfiguredFactory => applicationInMemoryFactory;
 
     private static CreateCustomerCommand NewCustomerCommand(string? email = null) => new()
     {

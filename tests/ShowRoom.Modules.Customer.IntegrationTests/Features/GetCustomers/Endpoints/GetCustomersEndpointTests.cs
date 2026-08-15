@@ -10,21 +10,14 @@ using ShowRoom.Modules.Customer;
 using ShowRoom.Modules.Customer.Features.GetCustomers;
 using ShowRoom.Modules.Customer.Persistence;
 using ShowRoom.SharedKernel.Emails;
-using ShowRoom.Testing.Configuration;
-using ShowRoom.Testing.Database;
 using CustomerAggregate = ShowRoom.Modules.Customer.Domain.Customer;
 
-public class GetCustomersEndpointTests(
-    CustomerBusinessWebFactory applicationInMemoryFactory,
-    DatabaseContainer database)
-    : IClassFixture<CustomerBusinessWebFactory>,
-      IClassFixture<DatabaseContainer>
+public class GetCustomersEndpointTests(CustomerBusinessWebFactory applicationInMemoryFactory)
+    : IClassFixture<CustomerBusinessWebFactory>
 {
     private static readonly string CustomersRoute = $"/api/v1/{CustomerModule.RouteSegment}";
 
-    private WebApplicationFactory<Program> ConfiguredFactory =>
-        applicationInMemoryFactory
-            .WithContainerDatabaseConfigured(new CustomerDatabaseConfiguration(database.ConnectionString!));
+    private WebApplicationFactory<Program> ConfiguredFactory => applicationInMemoryFactory;
 
     [Fact]
     public async Task Should_Paginate_Results()

@@ -27,7 +27,7 @@ public sealed class ProductsContext : DbContext
             type => type.Namespace?.StartsWith("ShowRoom.Modules.Product.Persistence", StringComparison.Ordinal) == true);
 
         // Domain/integration events are behavioural, never persisted.
-        modelBuilder.Ignore<DomainEvent>().Ignore<IntegrationEvent>();
+        modelBuilder.Ignore<DomainEvent>();
 
         base.OnModelCreating(modelBuilder);
     }

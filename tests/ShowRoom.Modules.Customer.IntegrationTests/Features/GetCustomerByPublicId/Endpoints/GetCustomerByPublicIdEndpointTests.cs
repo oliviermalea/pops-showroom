@@ -10,21 +10,14 @@ using ShowRoom.Modules.Customer;
 using ShowRoom.SharedKernel.Emails;
 using ShowRoom.Modules.Customer.Features.GetCustomerByPublicId;
 using ShowRoom.Modules.Customer.Persistence;
-using ShowRoom.Testing.Configuration;
-using ShowRoom.Testing.Database;
 using CustomerAggregate = ShowRoom.Modules.Customer.Domain.Customer;
 
-public class GetCustomerByPublicIdEndpointTests(
-    CustomerBusinessWebFactory applicationInMemoryFactory,
-    DatabaseContainer database)
-    : IClassFixture<CustomerBusinessWebFactory>,
-      IClassFixture<DatabaseContainer>
+public class GetCustomerByPublicIdEndpointTests(CustomerBusinessWebFactory applicationInMemoryFactory)
+    : IClassFixture<CustomerBusinessWebFactory>
 {
     private static readonly string CustomersRoute = $"/api/v1/{CustomerModule.RouteSegment}";
 
-    private WebApplicationFactory<Program> ConfiguredFactory =>
-        applicationInMemoryFactory
-            .WithContainerDatabaseConfigured(new CustomerDatabaseConfiguration(database.ConnectionString!));
+    private WebApplicationFactory<Program> ConfiguredFactory => applicationInMemoryFactory;
 
     [Fact]
     public async Task Should_Get_Customer_By_PublicId()

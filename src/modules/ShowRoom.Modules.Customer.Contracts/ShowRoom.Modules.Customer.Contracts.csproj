@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<RootNamespace>ShowRoom.Modules.Customer.Contracts</RootNamespace>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+	</PropertyGroup>
+
+	<!--
+	  Contract assembly: pure message DTOs shared across modules/services over the message bus.
+	  Per the architecture rules it must NOT depend on implementation (Domain/Features/Persistence)
+	  and carries no messaging-framework dependency (Wolverine messages are plain records).
+	-->
+
+</Project>

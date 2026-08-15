@@ -11,7 +11,9 @@
   <Folder Name="/src/BuildingBlocks/">
     <Project Path="src/buildingblocks/ShowRoom.BuildingBlocks/ShowRoom.BuildingBlocks.csproj" Id="7c5bdd51-2dc5-480a-80e6-6cdb3e6b6026" />
   </Folder>
-  <Folder Name="/src/Modules/" />
+  <Folder Name="/src/Modules/">
+    <Project Path="src/modules/ShowRoom.Modules.Customer.Contracts/ShowRoom.Modules.Customer.Contracts.csproj" />
+  </Folder>
   <Folder Name="/src/Modules/Customer/">
     <Project Path="src/modules/ShowRoom.Modules.Customer/ShowRoom.Modules.Customer.csproj" />
   </Folder>
@@ -25,7 +27,6 @@
   <Folder Name="/src/SharedKernel/">
     <Project Path="src/sharedkernel/ShowRoom.SharedKernel/ShowRoom.SharedKernel.csproj" />
   </Folder>
-  <Folder Name="/src/Websites/" />
   <Folder Name="/tests/">
     <Project Path="tests/ShowRoom.Testing/ShowRoom.Testing.csproj" />
     <Project Path="tests/ShowRoom.BuildingBlocks.Tests/ShowRoom.BuildingBlocks.Tests.csproj" />

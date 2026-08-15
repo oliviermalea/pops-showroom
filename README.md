@@ -32,7 +32,16 @@ Le système est **distribué** : le bounded context *Customer* est extrait dans 
 dialogue avec le service *Business* (Order + Product) **uniquement via RabbitMQ** (request/reply
 Wolverine). Les services partagent **une seule base PostgreSQL** (`showroom`) ; l'isolation entre
 modules est assurée par **un schéma dédié par module** (`customers`, `orders`, `products`) — séparation
-logique, pas physique.
+logique, pas physique. Un schéma `wolverine` supplémentaire héberge le **message store** de l'outbox
+transactionnel (tables gérées par Wolverine, à côté du schéma métier — pas un second DbContext).
+
+Deux styles de messagerie coexistent :
+- **request/reply synchrone** (`IMessageBus.InvokeAsync`) pour lire les données d'un autre module
+  (`GetOrdersForCustomer`) — sans garantie de livraison, avec dégradation gracieuse ;
+- **publish/subscribe garanti** via l'**outbox transactionnel** pour les *IntegrationEvents*
+  (`CustomerRegisteredIntegrationEvent`) — livraison au moins une fois, l'enveloppe étant persistée dans
+  la **même transaction** que le changement métier (même DbContext, même connexion) puis délivrée à
+  RabbitMQ avec retries.
 
 ```mermaid
 flowchart LR
@@ -47,7 +56,7 @@ flowchart LR
     end
 
     rabbit[[RabbitMQ<br/>messaging]]
-    db[("showroom<br/>(schémas: customers / orders / products)")]
+    db[("showroom<br/>(schémas: customers / orders / products / wolverine / wolverine_business)")]
 
     client -->|HTTP /customers| cust
     client -->|HTTP /orders, /products| ord
@@ -57,15 +66,21 @@ flowchart LR
     ord -.->|OrdersForCustomerResponse| rabbit
     rabbit -.->|reply| cust
 
-    cust ---|schéma customers| db
-    ord ---|schéma orders| db
+    cust -->|"outbox: CustomerRegistered (livraison garantie)"| rabbit
+    rabbit -->|CustomerRegistered| ord
+
+    cust ---|schémas customers + wolverine| db
+    ord ---|schémas orders + wolverine_business| db
     prod ---|schéma products| db
 ```
 
-- **`ShowRoom.Customer.Api`** — héberge le module Customer. **Producteur** du message : `GET
-  /customers/{id}/with-orders` émet `GetOrdersForCustomer` sur le bus et attend la réponse.
+- **`ShowRoom.Customer.Api`** — héberge le module Customer. **Producteur** : `GET
+  /customers/{id}/with-orders` émet `GetOrdersForCustomer` sur le bus et attend la réponse ; `POST
+  /customers` publie `CustomerRegisteredIntegrationEvent` via l'**outbox transactionnel** (livraison
+  garantie).
 - **`ShowRoom.Business.Api`** — héberge Order + Product. **Consommateur** : répond à
-  `GetOrdersForCustomer` depuis sa base, sans jamais exposer d'appel HTTP interne.
+  `GetOrdersForCustomer` depuis sa base (sans jamais exposer d'appel HTTP interne) et **consomme**
+  `CustomerRegisteredIntegrationEvent` (inbox durable + politique retry/dead-letter, voir plus bas).
 - Comme le handler Order vit dans un **autre process**, la requête traverse réellement le broker →
   trace distribuée complète et fiable, sans couplage HTTP entre services.
 - Dégradation gracieuse : si le service Order / le broker est indisponible, le client est tout de même
@@ -80,7 +95,7 @@ flowchart LR
 | Runtime | .NET 10, C# / Minimal APIs (aucun MVC) |
 | Orchestration | .NET Aspire (AppHost + ServiceDefaults) |
 | Persistance | EF Core 10 + PostgreSQL (une base `showroom`, un schéma par module) |
-| Messaging M2M | RabbitMQ via **Wolverine** (AMQP request/reply, `IMessageBus.InvokeAsync`) |
+| Messaging M2M | RabbitMQ via **Wolverine** — request/reply (`IMessageBus.InvokeAsync`) + **outbox transactionnel** (producteur, DbContext unique) + **inbox durable & retry/dead-letter** (consommateur) ; message stores PostgreSQL par service (`wolverine`, `wolverine_business`) |
 | Observabilité | OpenTelemetry (traces + métriques, export OTLP), Serilog (logs structurés) |
 | Identifiants | `StronglyTypedId` (Meziantou) en interne, `PublicId` (`prefix_guid`) exposé en HTTP |
 | Résultats | `Result`/`Error` + `ErrorCategory` (SmartEnum) → ProblemDetails, plutôt que des exceptions |
@@ -216,6 +231,48 @@ identifiées par leur **`PublicId`** (jamais l'identifiant technique).
   exportées.
 - **Logs** : Serilog structuré, enrichi `[Module] [Feature] [RequestId]`, `RequestId` dérivé du
   `TraceId` pour corréler logs et traces des deux services.
+
+### Outbox transactionnel (livraison garantie des IntegrationEvents)
+
+Là où `GetOrdersForCustomer` est une **lecture** best-effort (request/reply, dégradation gracieuse),
+un *IntegrationEvent* comme `CustomerRegisteredIntegrationEvent` exige une **livraison au moins une
+fois** entre services. ShowRoom l'assure avec l'**outbox transactionnel Wolverine**, sans mélanger les
+genres — **un seul DbContext**, la séparation se faisant au niveau du **schéma** :
+
+- **DbContext unique + schéma dédié** — `CustomersContext` porte le métier (schéma `customers`) ; les
+  tables d'enveloppes Wolverine vivent dans le schéma `wolverine` de la **même** base. L'atomicité vient
+  de là : l'outbox écrit l'enveloppe **via la connexion du DbContext**, donc dans la même transaction.
+  Le message store (`PersistMessagesWithPostgresql(showroom, "wolverine")`) est configuré une seule fois
+  dans `ConfigureShowRoomMessaging`, piloté par `Messaging:UseTransactionalOutbox` ; ses tables sont
+  auto-provisionnées, **hors migrations** du module.
+- **Publication atomique** — le handler `CreateCustomer` injecte `IDbContextOutbox<CustomersContext>`,
+  travaille sur `outbox.DbContext`, publie l'événement, puis `SaveChangesAndFlushMessagesAsync()` :
+  l'insert du client **et** l'enveloppe sont écrits dans **une seule transaction** (tout ou rien).
+- **Livraison durable** — le point d'envoi RabbitMQ est déclaré `UseDurableOutbox()` : un agent Wolverine
+  rejoue l'enveloppe jusqu'à acquittement, survivant aux crashes du process et aux coupures du broker.
+- **Tests sans broker** — les tests d'intégration désactivent les transports externes
+  (`DisableAllExternalWolverineTransports`) et nettoient le stockage Wolverine
+  (`ClearAllWolverineStorageAsync`) ; `CreateCustomerOutboxTests` utilise le *message tracking* Wolverine
+  (`TrackActivity().ExecuteAndWaitAsync(...)`) pour affirmer que l'événement est bien émis par l'outbox —
+  sans RabbitMQ réel.
+
+**Consommateur + retry / dead-letter (Business.Api).** Le module Order consomme
+`CustomerRegisteredIntegrationEvent` (slice `Features/OnCustomerRegistered`) :
+
+- **Inbox durable** — `ListenToRabbitQueue(...).UseDurableInbox()` ; Business.Api a **son propre** message
+  store (`Messaging:UsePersistentMessageStore`, schéma **`wolverine_business`** — un runtime Wolverine ne
+  partage jamais le store d'un autre service).
+- **Politique retry/dead-letter** — un message *poison* (non traitable, ici sans `PublicId`) lève
+  `UnprocessableCustomerRegisteredException` ; la politique le rejoue quelques fois avec cooldown puis le
+  déplace en **dead-letter** (`wolverine_business.wolverine_dead_letters`) plutôt que de le rejouer
+  indéfiniment. Elle est **scopée par type d'exception**, donc le request/reply `GetOrdersForCustomer`
+  n'est pas affecté.
+- **Preuve E2E** — `CustomerRegisteredConsumerE2ETests` (PostgreSQL + RabbitMQ Testcontainers, broker
+  réel) : un message bien formé est traité (`MessageSucceeded`), un message poison finit en dead-letter
+  (`MovedToErrorQueue`).
+
+> Domain events (in-process, at-most-once) vs Integration events (cross-service, at-least-once) : les
+> premiers passent par un `SaveChangesInterceptor` best-effort, les seconds par cet outbox durable.
 
 ### Métriques messaging (`MessagingMetrics`) — prêtes pour un board
 

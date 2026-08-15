@@ -25,7 +25,6 @@ public sealed class OrderDbContextFactory : IDesignTimeDbContextFactory<OrdersCo
 
         var connectionString =
             configuration.GetConnectionString("showroom")
-            ?? configuration.GetConnectionString("Orders")
             ?? "Host=localhost;Port=5432;Database=showroom;Username=postgres";
 
         var options = new DbContextOptionsBuilder<OrdersContext>()

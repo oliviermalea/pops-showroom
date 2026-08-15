@@ -25,7 +25,6 @@ public sealed class ProductDbContextFactory : IDesignTimeDbContextFactory<Produc
 
         var connectionString =
             configuration.GetConnectionString("showroom")
-            ?? configuration.GetConnectionString("Products")
             ?? "Host=localhost;Port=5432;Database=showroom;Username=postgres";
 
         var options = new DbContextOptionsBuilder<ProductsContext>()

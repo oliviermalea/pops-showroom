@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
 using ShowRoom.BuildingBlocks.Application;
 using ShowRoom.BuildingBlocks.Domain.Primitives;
 
@@ -7,12 +8,19 @@ namespace ShowRoom.BuildingBlocks.Persistence;
 /// <summary>
 /// EF Core interceptor that dispatches aggregates' domain events AFTER a successful commit — keeping the
 /// DbContext entirely free of event logic. It collects the events from the change tracker (via
-/// <see cref="IHasDomainEvents"/>), clears them, then hands them to the injected
-/// <see cref="IDomainEventDispatcher"/>. It NEVER writes to the context: dispatch is in-process and
-/// best-effort (at-most-once). Anything requiring guaranteed cross-service delivery must be an integration
-/// event published through the outbox, not this path.
+/// <see cref="IHasDomainEvents"/>), clears them, then hands them to an <see cref="IDomainEventDispatcher"/>
+/// resolved from a fresh DI scope. It NEVER writes to the context: dispatch is in-process and best-effort
+/// (at-most-once). Anything requiring guaranteed cross-service delivery must be an integration event
+/// published through the outbox, not this path.
 /// </summary>
-public sealed class DomainEventDispatchInterceptor(IDomainEventDispatcher dispatcher) : SaveChangesInterceptor
+/// <remarks>
+/// Registered as a <b>singleton</b> and dispatches through an <see cref="IServiceScopeFactory"/> scope: the
+/// DbContext options (and therefore the attached interceptor) are built from the ROOT service provider when
+/// the context is registered with Wolverine's outbox integration (<c>AddDbContextWithWolverineIntegration</c>),
+/// so a scoped interceptor could not be resolved there. A dedicated scope also isolates the best-effort
+/// reactions from the just-committed unit of work.
+/// </remarks>
+public sealed class DomainEventDispatchInterceptor(IServiceScopeFactory scopeFactory) : SaveChangesInterceptor
 {
     public override async ValueTask<int> SavedChangesAsync(
         SaveChangesCompletedEventData eventData,
@@ -38,6 +46,8 @@ public sealed class DomainEventDispatchInterceptor(IDomainEventDispatcher dispat
                     aggregate.ClearDomainEvents();
                 }
 
+                await using var scope = scopeFactory.CreateAsyncScope();
+                var dispatcher = scope.ServiceProvider.GetRequiredService<IDomainEventDispatcher>();
                 await dispatcher.DispatchAsync(domainEvents, cancellationToken);
             }
         }

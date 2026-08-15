@@ -58,7 +58,7 @@ If multiple rules conflict, apply in this order:
 - Use clear Arrange/Act/Assert structure for automated tests.
 - Prioritize testing where business/operational risk is highest.
 - Keep architecture tests as enforcement guardrails when present.
-- For modules exposing HTTP endpoints, include a complete isolation structure: a dedicated `<Module>BusinessWebFactory` and `<Module>DatabaseConfiguration`.
+- For modules exposing HTTP endpoints, include a complete isolation structure: a dedicated `<Module>BusinessWebFactory` (and a `<Module>DatabaseConfiguration`, unless the module self-configures its test database — e.g. transactional-outbox modules; see `tests.md`).
 
 ---
 

@@ -13,15 +13,15 @@ namespace ShowRoom.Modules.Product.Persistence;
 /// </summary>
 public static class DatabaseModule
 {
-    private const string ModuleConnectionStringName = "Products";
-    private const string AspireConnectionStringName = "showroom";
+    // Single shared database, always provided at runtime under this name: Aspire (WithReference), an
+    // environment variable, or the test WebApplicationFactory. The module is isolated by its own schema.
+    private const string ConnectionStringName = "showroom";
 
     /// <summary>Adds the Product database context to the service collection.</summary>
     public static IServiceCollection AddDatabase(this IServiceCollection services, IConfiguration configuration)
     {
         string? env = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
-        string? connectionString = configuration.GetConnectionString(AspireConnectionStringName)
-            ?? configuration.GetConnectionString(ModuleConnectionStringName);
+        string? connectionString = configuration.GetConnectionString(ConnectionStringName);
 
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
 

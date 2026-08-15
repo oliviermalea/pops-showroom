@@ -19,6 +19,8 @@
 	<ItemGroup>
 		<ProjectReference Include="..\..\buildingblocks\ShowRoom.BuildingBlocks\ShowRoom.BuildingBlocks.csproj" />
 		<ProjectReference Include="..\..\sharedkernel\ShowRoom.SharedKernel\ShowRoom.SharedKernel.csproj" />
+		<!-- This module publishes its own IntegrationEvents through this contract assembly. -->
+		<ProjectReference Include="..\ShowRoom.Modules.Customer.Contracts\ShowRoom.Modules.Customer.Contracts.csproj" />
 		<!-- Cross-module access is allowed ONLY through the Order message contract (no impl/DB access). -->
 		<ProjectReference Include="..\ShowRoom.Modules.Order.Contracts\ShowRoom.Modules.Order.Contracts.csproj" />
 	</ItemGroup>
@@ -41,6 +43,8 @@
 		<PackageReference Include="Scrutor" />
 		<!-- Machine-to-machine messaging (AMQP request/reply) — never HTTP for cross-module calls. -->
 		<PackageReference Include="WolverineFx" />
+		<!-- Transactional outbox: IDbContextOutbox<CustomersContext> publishes IntegrationEvents in the DB transaction. -->
+		<PackageReference Include="WolverineFx.EntityFrameworkCore" />
 	</ItemGroup>
 
 </Project>

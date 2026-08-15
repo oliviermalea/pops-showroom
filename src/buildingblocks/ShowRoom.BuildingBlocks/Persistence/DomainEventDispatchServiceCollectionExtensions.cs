@@ -5,9 +5,11 @@ using ShowRoom.BuildingBlocks.Application;
 namespace ShowRoom.BuildingBlocks.Persistence;
 
 /// <summary>
-/// Registers the domain-event dispatch pipeline (dispatcher + EF interceptor), both scoped so the
-/// interceptor and its handlers resolve per-DbContext instance. Idempotent — safe to call from every
-/// module. Attach the interceptor to a context with
+/// Registers the domain-event dispatch pipeline: a scoped <see cref="IDomainEventDispatcher"/> (resolves
+/// the per-request handlers) and a singleton <see cref="DomainEventDispatchInterceptor"/> (the DbContext
+/// options are built from the root provider under Wolverine's outbox integration, so the interceptor must
+/// be root-resolvable; it opens its own scope to dispatch). Idempotent — safe to call from every module.
+/// Attach the interceptor to a context with
 /// <c>options.AddInterceptors(sp.GetRequiredService&lt;DomainEventDispatchInterceptor&gt;())</c>.
 /// </summary>
 public static class DomainEventDispatchServiceCollectionExtensions
@@ -15,7 +17,7 @@ public static class DomainEventDispatchServiceCollectionExtensions
     public static IServiceCollection AddDomainEventDispatch(this IServiceCollection services)
     {
         services.TryAddScoped<IDomainEventDispatcher, DomainEventDispatcher>();
-        services.TryAddScoped<DomainEventDispatchInterceptor>();
+        services.TryAddSingleton<DomainEventDispatchInterceptor>();
 
         return services;
     }

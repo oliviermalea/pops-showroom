@@ -30,6 +30,38 @@ public sealed class MessagingOptions
     /// <summary>Whether remote request/reply (<c>IMessageBus.InvokeAsync</c> across the broker) is allowed.</summary>
     public bool EnableRemoteInvocation { get; set; } = true;
 
+    /// <summary>
+    /// Enables Wolverine's transactional outbox for IntegrationEvents: a PostgreSQL message store persists
+    /// outgoing envelopes in the SAME database transaction as the business change, then a durable sending
+    /// agent delivers them to RabbitMQ with retries (guaranteed at-least-once cross-service delivery).
+    /// The module keeps a SINGLE DbContext: the outbox writes envelopes through that context's own
+    /// connection (that is what makes the write atomic), while the Wolverine tables live in their own
+    /// <see cref="MessageStoreSchema"/> — logical separation without a second DbContext.
+    /// </summary>
+    public bool UseTransactionalOutbox { get; set; }
+
+    /// <summary>
+    /// Provisions the PostgreSQL message store WITHOUT the producer-side DbContext outbox integration —
+    /// for a service that only needs the durable inbox + dead-letter storage (a consumer). Implied by
+    /// <see cref="UseTransactionalOutbox"/>. Each service must use its own <see cref="MessageStoreSchema"/>
+    /// (two Wolverine runtimes must not share one message store).
+    /// </summary>
+    public bool UsePersistentMessageStore { get; set; }
+
+    /// <summary>
+    /// Connection-string name for the message store. Defaults to the shared <c>showroom</c> database, so
+    /// the Wolverine tables sit in the same database as the module (for the outbox this is required: it
+    /// writes envelopes through the module DbContext's own connection).
+    /// </summary>
+    public string MessageStoreConnectionName { get; set; } = "showroom";
+
+    /// <summary>
+    /// Dedicated schema holding this service's Wolverine message-store tables, kept apart from module
+    /// schemas AND from other services' stores (e.g. <c>wolverine</c> for Customer, <c>wolverine_business</c>
+    /// for Business).
+    /// </summary>
+    public string MessageStoreSchema { get; set; } = "wolverine";
+
     /// <summary>Binds the options from the <c>"Messaging"</c> section (never null).</summary>
     public static MessagingOptions FromConfiguration(IConfiguration configuration)
     {
