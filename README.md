@@ -302,11 +302,120 @@ discovery Aspire et du handler de résilience de ServiceDefaults). Les méthodes
 (`CustomerLookupOutcome`, `CustomerCreationOutcome`), pas une exception. Chaque état (chargement / vide
 / invalide / introuvable / indisponible / succès) a sa branche dans la page.
 
+**Modèle d'hébergement et render modes.** `ShowRoom.Web` est une **Blazor Web App** (modèle unifié
+.NET 8+, un seul projet, `blazor.web.js`) — et non l'ancien template « ASP.NET Core hosted WebAssembly »
+(supprimé depuis .NET 8, remplacé par les render modes). Aucun WebAssembly n'est embarqué : le client
+Refit et la façade vivent côté serveur, donc le navigateur ignore l'existence des APIs (propriété
+**BFF**). Passer en `InteractiveWebAssembly` / `InteractiveAuto` exigerait un projet Client, l'exposition
+des APIs au navigateur (CORS + auth) et alourdirait le **premier** chargement — c'est un choix
+d'architecture, pas un réglage.
+
+Le render mode est décidé **par écran**, pas globalement :
+
+| Écran | Render mode | Circuit SignalR |
+|---|---|---|
+| Accueil, liste, fiche, commandes | **SSR statique** + `[StreamRendering]` | **aucun** |
+| Création de client | `InteractiveServer` | oui (validation au fil de la saisie) |
+
+Vérifié sur le HTML servi : 0 marqueur de composant interactif sur les écrans de lecture, 1 sur
+`/customers/new`. Les interactions des écrans statiques passent par le web : **formulaire GET** pour le
+filtre, **liens** pour la pagination et les actions « Réessayer » — la navigation enrichie de
+`blazor.web.js` les rend sans rechargement complet, et les URLs restent partageables.
+
+La coquille (menu mobile, retour en haut) est pilotée par `wwwroot/App/Layout/shell.js` en **JS pur** :
+en faire des composants interactifs rouvrirait un circuit sur chaque page et annulerait le bénéfice du
+SSR statique.
+
+**Streaming.** Les écrans de lecture déclarent `@attribute [StreamRendering]` : la coquille part dès le
+premier octet, les données sont diffusées dès que l'API répond, au lieu de retenir toute la réponse HTML.
+Mesuré sur l'écran des commandes, service Order arrêté (pire cas, 6,3 s de dégradation) :
+
+| | TTFB | Réponse complète |
+|---|---|---|
+| Sans streaming | **6,36 s** | 6,36 s |
+| Avec streaming | **0,03 s** | 6,32 s |
+
+Soit un premier octet ~150× plus rapide, et un écran blanc de 6,4 s remplacé par la coquille + le
+squelette immédiats. Sur la liste (API à chaud) : TTFB 0,05 s, réponse complète 0,40 s.
+
+**Compression et cache HTTP.** `UseResponseCompression` (Brotli + Gzip, niveau optimal) est activé sur
+les réponses dynamiques. Les assets statiques ne passent pas par là : `MapStaticAssets` les sert déjà
+**pré-compressés et empreintés** (vérifié : `app.css` renvoyé en `br`, 1 988 o, avec ETag).
+
+| Page | Poids nu | Poids Brotli | Encodage |
+|---|---|---|---|
+| `/` | 17 967 o | **4 969 o** (−72 %) | `br` |
+| `/customers/new` | 8 742 o | **3 590 o** (−59 %) | `br` |
+| `/customers`, fiche, commandes | 21 575 o | 21 575 o | `identity` |
+
+> ⚠️ **Streaming et compression s'excluent.** Les trois écrans en `[StreamRendering]` sortent en
+> `Content-Encoding: identity` — un intermédiaire qui compresse pourrait tamponner la réponse et
+> détruire le streaming. Le compromis est assumé : sur le chemin dégradé de l'écran commandes, le
+> streaming ramène le TTFB de 6,36 s à 0,03 s, ce qu'aucune compression n'approche. TTFB vérifié
+> inchangé après activation (`/customers` : 0,05 s).
+
+**Cache HTTP : volontairement aucun cache de sortie.** Décision mesurée, pas supposée :
+- les écrans clients portent l'en-tête **`no-store, no-cache, must-revalidate`** — une liste en cache
+  masquerait le client tout juste créé, et un « retour » sur un poste partagé rejouerait des données
+  personnelles ;
+- la page d'accueil, seule candidate, émet un **`Set-Cookie` antiforgery** comme toute réponse SSR Razor
+  Components. L'output cache refuse — à juste titre — de stocker une telle réponse : la forcer
+  distribuerait le jeton antiforgery d'un visiteur à tous les autres. Mesuré : 5 requêtes successives à
+  29–37 ms, sans aucun palier de cache. Gain écarté (~30 ms de rendu serveur) au regard du risque.
+  À reconsidérer seulement derrière un CDN/proxy qui retire le cookie.
+
 **Chargement.** La liste ne dit pas « Chargement… » : elle rend un **squelette** reproduisant le
-tableau réel (mêmes colonnes, nombre de lignes repris de la page remplacée), maintenu au moins 350 ms
-pour qu'une réponse rapide ne produise pas un clignotement. La pagination reste rendue mais masquée en
-`visibility: hidden` pendant ce temps : l'arrivée des données ne décale rien. Scintillement et fondu
+tableau réel (5 lignes), diffusé dès le premier octet grâce au streaming. La pagination reste rendue
+mais masquée en `visibility: hidden` : l'arrivée des données ne décale rien. Scintillement et fondu
 sont neutralisés sous `prefers-reduced-motion`.
+
+Deux réglages ont été **retirés après mesure**, et c'est instructif :
+
+| Réglage retiré | Pourquoi |
+|---|---|
+| Plancher d'affichage de 350 ms | En SSR + streaming le squelette part dans le premier flush et le navigateur coalesce les peintures : rien ne clignote. Le plancher retardait la réponse complète de 345 ms (381 ms → 52 ms) sans rien apporter. |
+| Squelette calqué sur la page précédente | En SSR statique chaque requête instancie un composant neuf : un champ d'instance repart toujours de sa valeur par défaut. Le calquer sur `PageSize` alourdissait la réponse de 21,6 à 28,4 Ko, payés à chaque requête. |
+
+Trois variantes ont été mesurées sur `/customers` avant d'arbitrer (médiane de 7 requêtes) :
+
+| Variante | TTFB | Réponse complète | Poids | Encodage |
+|---|---|---|---|---|
+| Streaming + plancher 350 ms | 19 ms | 381 ms | 21 575 o | `identity` |
+| **Streaming sans plancher** *(retenue)* | **38 ms** | **52 ms** | 21 575 o | `identity` |
+| Sans streaming (SSR simple) | 35 ms | 35 ms | **3 763 o** | `br` |
+
+Le streaming ne gagne du temps que si l'API est lente — son TTFB reste constant quoi qu'il arrive,
+alors que celui du SSR simple suit la latence de l'API. Sur la liste (API à ~30 ms) les deux sont à
+égalité en temps, et le SSR simple est 5,7× plus léger ; le streaming est conservé pour garder un
+indicateur de chargement le jour où la liste ralentira, et par cohérence avec l'écran commandes où
+l'écart est décisif (TTFB 0,02 s contre 2 s de réponse complète mesurés en dégradé).
+
+**Tenue en charge (mesurée à 200 026 clients).** Le front n'est pas le facteur limitant : la
+pagination borne la page à 20 lignes, donc son poids et son TTFB sont constants quel que soit le
+volume. Ce sont les requêtes SQL de la liste qui plafonnent.
+
+L'`ORDER BY "CreatedAt" DESC` de la liste n'avait aucun index : chaque page déclenchait un parcours
+séquentiel puis un tri complet **débordant sur disque** (`external merge Disk: 9864kB`). L'index
+`IX_customers_CreatedAt` (migration `AddCustomerCreatedAtIndex`) corrige ça :
+
+| | Sans index | Avec index |
+|---|---|---|
+| SQL page 1 | 41 ms (`Seq Scan` + tri disque) | **0,12 ms** (`Index Scan`) |
+| API page 1 | 0,070 s | **0,032 s** |
+| API page 5000 | 0,112 s | **0,039 s** |
+| Front liste page 1 (TTFB / complet) | 0,032 / 0,071 s | **0,017 / 0,038 s** |
+| Front liste page 5000 | 0,030 / 0,107 s | **0,014 / 0,047 s** |
+
+Deux limites subsistent, connues et non corrigées à ce stade :
+
+1. **`OFFSET` profond** — même avec l'index, la page 5000 parcourt 100 020 entrées d'index. Seule une
+   pagination *keyset* (`WHERE "CreatedAt" < @dernier`) rend le coût indépendant de la profondeur.
+2. **Recherche `ILIKE '%…%'`** — non indexable en b-tree, `Seq Scan` intégral (~148 ms à 200 k). Un
+   index **GIN + pg_trgm** est la réponse.
+
+Le `COUNT(*)` de chaque page reste modeste (~35 ms à 200 k) ; au-delà du million de lignes il faudrait
+un compte approché ou mis en cache. Le design du front — streaming + squelette — est celui qui encaisse
+le mieux ces dégradations : son TTFB reste stable quelle que soit la lenteur de la requête.
 
 **Dégradation cross-service, visible à l'écran.** `/customers/{publicId}/orders` consomme l'endpoint
 agrégeant `with-orders` : le service Customer y récupère l'historique auprès du service Order **via

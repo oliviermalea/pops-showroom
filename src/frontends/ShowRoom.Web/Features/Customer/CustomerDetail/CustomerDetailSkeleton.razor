@@ -1,0 +1,28 @@
+@* État de chargement de la fiche : même ossature que CustomerDetailCard (en-tête + 6 specs en deux
+   colonnes), pour que la substitution ne déplace rien. Aligné sur le squelette de la liste. *@
+
+<article class="fiche fiche--skeleton"
+         role="status"
+         aria-busy="true"
+         aria-live="polite"
+         aria-label="Chargement de la fiche client">
+    <header class="fiche__header" aria-hidden="true">
+        <span class="skeleton skeleton--name"></span>
+        <span class="skeleton skeleton--status"></span>
+    </header>
+
+    <div class="fiche__specs" aria-hidden="true">
+        @for (var spec = 0; spec < SpecCount; spec++)
+        {
+            <div class="fiche__spec">
+                <span class="skeleton skeleton--label"></span>
+                <span class="skeleton skeleton--value"></span>
+            </div>
+        }
+    </div>
+</article>
+
+@code {
+    /// <summary>Nombre de champs de la fiche réelle (public id, prénom, nom, email, téléphone, date).</summary>
+    private const int SpecCount = 6;
+}

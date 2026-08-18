@@ -275,6 +275,19 @@ Cross-module (and future cross-service) data exchange goes over **RabbitMQ via W
 - A module persists only its own data.
 - No direct access to other module tables/collections.
 
+### 4.1.1 Index et colonnes de tri (obligatoire)
+- Toute colonne servant l'`ORDER BY` d'une **liste paginee** doit porter un index, declare dans la
+  `IEntityTypeConfiguration` (`HasIndex(...).IsDescending()` quand le tri est descendant) et livre par
+  une **migration EF** — jamais un `CREATE INDEX` a la main, qui ferait diverger la base du schema
+  versionne. Sans index, PostgreSQL parcourt puis trie la table entiere a CHAQUE page : mesure a
+  200 000 lignes, tri sur disque (`external merge`, 9,8 Mo) et 41 ms par page, contre 0,12 ms ensuite.
+- Un index est **invisible dans les tests de comportement** (tout passe sans lui, juste plus lentement) :
+  l'ancrer par un test sur le modele (`GetService<IDesignTimeModel>().Model`, pas `context.Model` qui
+  est optimise pour l'execution et perd le sens de tri).
+- Connaitre les deux limites que l'index ne leve pas : un `OFFSET` profond parcourt quand meme toutes
+  les entrees precedentes (reponse : pagination *keyset*), et un `ILIKE '%…%'` reste un scan complet
+  (reponse : index GIN + pg_trgm).
+
 ### 4.2 ACL placement
 For external integrations, place in `Persistence` (or `AntiCorruption/Adapters`):
 - external DTOs

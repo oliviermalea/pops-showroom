@@ -123,6 +123,10 @@
 }
 
 .degraded__retry {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
     margin-top: var(--space-1);
     min-height: 44px;
     padding: 0 var(--space-3);
@@ -171,6 +175,10 @@
 }
 
 .orders__retry {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
     margin-top: var(--space-2);
     min-height: 44px;
     padding: 0 var(--space-3);

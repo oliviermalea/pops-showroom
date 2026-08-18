@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using ShowRoom.Modules.Customer.Persistence;
@@ -11,9 +12,11 @@ using ShowRoom.Modules.Customer.Persistence;
 namespace ShowRoom.Modules.Customer.Persistence.Migrations
 {
     [DbContext(typeof(CustomersContext))]
-    partial class CustomersContextModelSnapshot : ModelSnapshot
+    [Migration("20260818163002_AddCustomerCreatedAtIndex")]
+    partial class AddCustomerCreatedAtIndex
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

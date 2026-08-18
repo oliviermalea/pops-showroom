@@ -417,17 +417,68 @@ The project-specific structure for `src/frontends/ShowRoom.Web` must follow this
   `AddStandardResilienceHandler(options => …)`), et reduire les retries : re-jouer un appel agregeant
   de 16 s n'apporte aucune information.
 
+### Modele d'hebergement et render modes (valide — etapes « streaming » et « SSR statique »)
+- ShowRoom.Web est une **Blazor Web App** (modele unifie .NET 8+, projet unique, `blazor.web.js`).
+  « Blazor hosted » n'existe plus : c'etait le template ASP.NET Core hosted WebAssembly de .NET 6/7,
+  remplace par les render modes. « Blazor Hybrid » est une coquille native (MAUI) : hors sujet ici.
+- Le client Refit et la facade vivent **cote serveur** : le navigateur ne connait aucune URL d'API. Cette
+  propriete BFF est un choix a defendre — passer en `InteractiveWebAssembly`/`InteractiveAuto` impose un
+  projet Client, du CORS, de l'auth cote navigateur, et **alourdit le premier chargement**. WASM ne
+  reduit pas le temps de chargement : il le deplace vers les interactions suivantes.
+- **Le render mode se decide par ecran.** `App.razor` ne pose AUCUN `@rendermode` : le defaut est le SSR
+  statique, et seuls les ecrans qui en ont besoin declarent `@rendermode InteractiveServer`. Un ecran de
+  lecture n'a pas besoin de circuit.
+- Sur un ecran statique, les interactions passent par le web : **formulaire GET** pour un filtre (l'etat
+  atterrit dans la query string, donc URL partageable), **liens** pour la pagination et les actions
+  « Reessayer ». Un lien de pagination indisponible est un `<span aria-disabled="true">`, jamais un `<a>`
+  inerte. La navigation enrichie evite le rechargement complet.
+- **La coquille (layout) ne doit pas etre interactive** : un `@onclick` sur le menu ou le scroll-top
+  rouvre un circuit sur CHAQUE page et annule tout le benefice. Ces comportements purement locaux vont
+  dans un module JS (`wwwroot/App/Layout/shell.js`) avec des ecouteurs **delegues sur `document`**, pour
+  survivre au remplacement du DOM par la navigation enrichie (`enhancedload`).
+- Tout ecran dont le rendu attend un appel reseau declare `@attribute [StreamRendering]`. Sans lui, la
+  reponse HTML est retenue jusqu'a la fin du composant : mesure sur un chemin degrade a 6,3 s → TTFB
+  6,36 s sans streaming contre 0,03 s avec. Le squelette n'a de valeur que s'il est **envoye**
+  immediatement : squelette et streaming vont ensemble.
+- Verifier le resultat sur le HTML servi, pas sur une intention : `curl` puis compter les marqueurs
+  `"type":"server"` (0 = aucun composant interactif, donc aucun circuit). Et mesurer avec
+  `curl -w "TTFB=%{time_starttransfer} TOTAL=%{time_total}"`.
+
+### Compression et cache HTTP (valide — etape « compression / cache »)
+- `UseResponseCompression` (Brotli + Gzip) sur les reponses **dynamiques** uniquement. Ne pas y ajouter
+  les assets statiques : `MapStaticAssets` les sert deja pre-compresses et empreintes.
+- `EnableForHttps = true` est un choix a re-examiner le jour ou une authentification arrive : compresser
+  sous TLS reouvre la classe BREACH quand une reponse melange un secret et une entree controlee par
+  l'attaquant. Aujourd'hui ces pages ne portent ni secret ni jeton de session.
+- **Streaming et compression s'excluent** : une reponse `[StreamRendering]` sort en
+  `Content-Encoding: identity`. Arbitrer par page — le streaming gagne des que la donnee peut etre lente
+  (TTFB 0,03 s au lieu de 6,36 s sur un chemin degrade), la compression gagne sur une page rapide et
+  volumineuse (−72 % sur l'accueil). Ne pas supposer que les deux s'additionnent : le verifier avec
+  `curl -H "Accept-Encoding: br" -D -`.
+- Un ecran portant des donnees metier personnelles emet **`no-store, no-cache, must-revalidate`**. Le
+  poser dans un middleware **par chemin** : un composant `[StreamRendering]` a deja vide ses en-tetes
+  quand il s'execute.
+- **Ne pas mettre d'output cache sur une page Razor Components SSR** : elle emet un `Set-Cookie`
+  antiforgery, l'output cache refuse donc de la stocker — et le forcer distribuerait le jeton d'un
+  visiteur a tous les autres. Mesurer avant de conclure a un gain : un cache qui n'atteint jamais son
+  cache-hit est du code mort trompeur, il vaut mieux le supprimer.
+
 ### Etat de chargement (valide — etape « squelette de liste »)
 - Un ecran de donnees n'affiche pas « Chargement… » : il rend un **squelette** qui reproduit la
   structure reelle (memes colonnes, memes metriques de ligne), pour que l'arrivee des donnees soit une
   substitution et non un saut de mise en page.
 - Le squelette porte `role="status"` + `aria-busy="true"` + `aria-live="polite"` + un `aria-label`
   explicite ; ses lignes sont `aria-hidden="true"` (des barres decoratives n'ont rien a annoncer).
-- **Duree minimale d'affichage** (~350 ms) : une reponse en 30 ms ferait clignoter le squelette, plus
-  perturbant que pas d'indicateur. Mesurer avec un `Stopwatch` et completer par un `Task.Delay` avant
-  d'exposer le resultat.
-- Le nombre de lignes du squelette **reprend celui de la page qu'il remplace** (memorise au dernier
-  chargement reussi, valeur par defaut sinon) : le bloc garde sa hauteur d'une page a l'autre.
+- **Duree minimale d'affichage : uniquement en rendu interactif.** Quand le squelette est bascule
+  cote client, un plancher (~350 ms) evite un clignotement. En **SSR + streaming**, il fait partie du
+  premier flush HTML et le navigateur coalesce les peintures : le plancher n'evite plus rien et
+  retarde la reponse complete d'autant (mesure : 381 ms avec, 52 ms sans). Ne pas le poser par reflexe.
+- Le squelette **annonce** l'arrivee d'un tableau, il n'egale pas sa hauteur finale : le calquer sur la
+  taille de page a coute +31 % de poids (21,6 → 28,4 Ko) a chaque requete, pour une fidelite utile
+  seulement sur un chargement lent. Un nombre de lignes sobre et constant suffit.
+- En SSR statique, **un champ d'instance ne survit pas d'une requete a l'autre** : chaque requete
+  instancie un composant neuf. Toute « memoire » entre deux rendus (nombre de lignes precedent, etat
+  d'ecran) y est du code mort — la verifier avant de l'ecrire.
 - Les elements peripheriques qui disparaissent pendant le chargement (pagination, compteur) restent
   **rendus** et sont masques en `visibility: hidden` — jamais retires du DOM : `display: none` libere
   leur place et fait sauter le contenu au retour des donnees.

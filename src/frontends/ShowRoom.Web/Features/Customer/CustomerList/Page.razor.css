@@ -207,6 +207,10 @@
 }
 
 .list__retry {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
     margin-top: var(--space-2);
     min-height: 44px;
     padding: 0 var(--space-3);
@@ -258,6 +262,10 @@
 }
 
 .pager__button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
     min-height: 44px;
     padding: 0 var(--space-3);
     font-family: inherit;
@@ -278,9 +286,16 @@
     border-color: var(--color-features);
 }
 
-.pager__button:disabled {
+.pager__button:disabled,
+.pager__button--disabled {
     cursor: not-allowed;
     color: var(--color-line);
+}
+
+/* Un lien de pagination indisponible est rendu en <span> : il ne doit ni etre focusable ni
+   reagir au survol. */
+.pager__button--disabled {
+    pointer-events: none;
 }
 
 @media (max-width: 1024px) {

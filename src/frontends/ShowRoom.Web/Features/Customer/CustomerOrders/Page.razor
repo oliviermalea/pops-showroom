@@ -1,4 +1,7 @@
 @page "/customers/{PublicId}/orders"
+@attribute [StreamRendering]
+@* SSR statique + streaming : aucun circuit SignalR. La coquille part des le premier octet,
+   l'historique est diffuse quand l'agregation cross-service repond (jusqu'a ~6 s si degradee). *@
 @using ShowRoom.Web.Features.Customer
 @inject ICustomerFacade CustomerFacade
 
@@ -44,7 +47,7 @@
                                 Le service Order n'a pas répondu sur le bus AMQP. La fiche client reste
                                 exacte ; seules les commandes manquent.
                             </p>
-                            <button type="button" class="degraded__retry" @onclick="LoadAsync">Réessayer</button>
+                            <a class="degraded__retry" href="@($"/customers/{PublicId}/orders")">Réessayer</a>
                         </div>
                     }
                     else if (customer.IsEmpty)
@@ -82,7 +85,7 @@
                 default:
                     <div class="orders__state orders__state--error" role="alert">
                         <p>Le service Customer est momentanément indisponible.</p>
-                        <button type="button" class="orders__retry" @onclick="LoadAsync">Réessayer</button>
+                        <a class="orders__retry" href="@($"/customers/{PublicId}/orders")">Réessayer</a>
                     </div>
                     break;
             }

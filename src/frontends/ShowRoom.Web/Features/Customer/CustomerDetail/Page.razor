@@ -1,4 +1,7 @@
 @page "/customers/{PublicId}"
+@attribute [StreamRendering]
+@* SSR statique + streaming : aucun circuit SignalR. La coquille part des le premier octet,
+   la fiche est diffusee quand l'API repond. *@
 @using ShowRoom.Web.Features.Customer
 @inject ICustomerFacade CustomerFacade
 
@@ -25,7 +28,7 @@
 
         @if (isLoading)
         {
-            <p class="customer__state" role="status" aria-live="polite">Chargement du client…</p>
+            <CustomerDetailSkeleton />
         }
         else if (result is not null)
         {
@@ -51,7 +54,7 @@
                 default:
                     <div class="customer__state customer__state--error" role="alert">
                         <p>Le service Customer est momentanément indisponible.</p>
-                        <button type="button" class="customer__retry" @onclick="LoadAsync">Réessayer</button>
+                        <a class="customer__retry" href="@($"/customers/{PublicId}")">Réessayer</a>
                     </div>
                     break;
             }

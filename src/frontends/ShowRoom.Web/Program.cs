@@ -1,4 +1,6 @@
+using System.IO.Compression;
 using FluentValidation;
+using Microsoft.AspNetCore.ResponseCompression;
 using Serilog;
 using Serilog.Events;
 using Serilog.Sinks.SystemConsole.Themes;
@@ -34,6 +36,32 @@ builder.Services.AddRazorComponents()
 builder.Services.AddBackendApis(builder.Configuration);
 builder.Services.AddScoped<ICustomerFacade, CustomerFacade>();
 
+// Response compression of the DYNAMIC responses (the SSR HTML). Static assets are already served
+// pre-compressed and fingerprinted by MapStaticAssets, so they are deliberately NOT re-compressed here.
+//
+// EnableForHttps is opt-in: compressing over TLS re-opens the BREACH class of attacks when a response
+// mixes a secret with attacker-controlled input. These pages carry no secret and no session token, so
+// the trade is acceptable — it must be re-examined the day authentication lands.
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<BrotliCompressionProvider>();
+    options.Providers.Add<GzipCompressionProvider>();
+    options.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(["application/json", "image/svg+xml"]);
+});
+
+builder.Services.Configure<BrotliCompressionProviderOptions>(o => o.Level = CompressionLevel.Optimal);
+builder.Services.Configure<GzipCompressionProviderOptions>(o => o.Level = CompressionLevel.Optimal);
+
+// NO output cache here, and it is a deliberate choice — measured, not assumed:
+//  * the customer screens must not be cached at all (see the no-store policy below): a cached list
+//    would hide the customer that was just created;
+//  * the home page, the only cacheable candidate, carries an antiforgery `Set-Cookie` like every
+//    Razor Components SSR response. The output cache legitimately refuses to store such a response,
+//    and forcing it would hand one visitor's antiforgery token to every other visitor.
+// Serving it from a cache would take a per-request render of ~30 ms off the server — not worth a
+// cross-visitor token leak. Revisit only behind a CDN/proxy that strips the cookie.
+
 // Form validation: FluentValidation only (never DataAnnotations), scoped like the components using it.
 builder.Services.AddValidatorsFromAssemblyContaining<Program>(ServiceLifetime.Scoped);
 
@@ -49,9 +77,26 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
+// First in the pipeline: it wraps everything downstream, including what comes out of the output cache
+// (the cache therefore stores uncompressed bytes, compressed once per client encoding).
+app.UseResponseCompression();
+
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
 app.UseAntiforgery();
+
+// Customer data must never be stored by a browser or an intermediary proxy: a "back" after logout (or a
+// shared machine) would replay it. Applied by path rather than per component, because a component
+// declaring [StreamRendering] has already flushed its headers by the time it renders.
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/customers"))
+    {
+        context.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
+    }
+
+    await next(context);
+});
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()

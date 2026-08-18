@@ -1,14 +1,11 @@
 @inherits LayoutComponentBase
-@implements IAsyncDisposable
-@inject IJSRuntime JS
+
+@* Coquille entièrement statique : aucun `@code`, aucun render mode interactif. Le menu mobile et le
+   bouton « retour en haut » sont pilotés par wwwroot/App/Layout/shell.js — sinon chaque page, même
+   rendue en SSR statique, ouvrirait un circuit SignalR juste pour ces deux boutons. *@
 
 <div class="layout">
-    <button type="button"
-            class="scroll-top @(showScrollTop ? "is-visible" : null)"
-            aria-label="Retour en haut"
-            @onclick="ScrollToTop">
-        ↑
-    </button>
+    <button type="button" class="scroll-top" aria-label="Retour en haut">↑</button>
 
     <header class="site-header">
         <div class="site-header__inner">
@@ -16,23 +13,23 @@
 
             <button type="button"
                     class="menu-toggle"
-                    aria-label="@(isMenuOpen ? "Fermer le menu" : "Ouvrir le menu")"
-                    aria-expanded="@(isMenuOpen ? "true" : "false")"
-                    @onclick="ToggleMenu">
+                    aria-label="Ouvrir le menu"
+                    aria-expanded="false"
+                    aria-controls="site-nav">
                 <span></span>
                 <span></span>
                 <span></span>
             </button>
 
-            <nav class="site-nav @(isMenuOpen ? "is-open" : null)" aria-label="Navigation principale">
-                <a href="/#principes" class="nav-link" @onclick="CloseMenu">Principes</a>
-                <a href="/#modules" class="nav-link" @onclick="CloseMenu">Modules</a>
-                <a href="/customers" class="nav-link" @onclick="CloseMenu">Clients</a>
+            <nav id="site-nav" class="site-nav" aria-label="Navigation principale">
+                <a href="/#principes" class="nav-link">Principes</a>
+                <a href="/#modules" class="nav-link">Modules</a>
+                <a href="/customers" class="nav-link">Clients</a>
             </nav>
         </div>
     </header>
 
-    <div class="menu-backdrop @(isMenuOpen ? "is-open" : null)" aria-hidden="true" @onclick="CloseMenu"></div>
+    <div class="menu-backdrop" aria-hidden="true"></div>
 
     <div class="container layout__content">
         @Body
@@ -51,54 +48,3 @@
     <a href="." class="reload">Recharger</a>
     <span class="dismiss">✕</span>
 </div>
-
-@code {
-    private bool isMenuOpen;
-    private bool showScrollTop;
-    private IJSObjectReference? scrollTopModule;
-    private DotNetObjectReference<MainLayout>? dotNetRef;
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            scrollTopModule = await JS.InvokeAsync<IJSObjectReference>("import", "/App/Layout/scrollTop.js");
-            dotNetRef = DotNetObjectReference.Create(this);
-            await scrollTopModule.InvokeVoidAsync("register", dotNetRef);
-        }
-    }
-
-    private void ToggleMenu() => isMenuOpen = !isMenuOpen;
-
-    private void CloseMenu() => isMenuOpen = false;
-
-    [JSInvokable]
-    public void SetScrollTopVisibility(bool visible)
-    {
-        if (showScrollTop != visible)
-        {
-            showScrollTop = visible;
-            InvokeAsync(StateHasChanged);
-        }
-    }
-
-    private async Task ScrollToTop()
-        => await JS.InvokeVoidAsync("window.scrollTo", new { top = 0, behavior = "smooth" });
-
-    public async ValueTask DisposeAsync()
-    {
-        if (scrollTopModule is not null)
-        {
-            try
-            {
-                await scrollTopModule.InvokeVoidAsync("unregister");
-                await scrollTopModule.DisposeAsync();
-            }
-            catch
-            {
-            }
-        }
-
-        dotNetRef?.Dispose();
-    }
-}

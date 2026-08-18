@@ -1,0 +1,75 @@
+/* Métriques calquées sur CustomerDetailCard.razor.css : la bascule ne doit rien décaler. */
+
+.fiche {
+    border-top: 2px solid var(--color-features);
+    padding-top: var(--space-3);
+}
+
+.fiche--skeleton {
+    pointer-events: none;
+    user-select: none;
+}
+
+.fiche__header {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-4);
+}
+
+.fiche__specs {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-1) var(--space-4);
+}
+
+.fiche__spec {
+    border-top: 1px solid var(--color-line);
+    padding-top: var(--space-2);
+    padding-bottom: var(--space-3);
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.skeleton {
+    display: block;
+    height: 12px;
+    border-radius: 999px;
+    background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--color-line) 70%, white) 0%,
+        color-mix(in srgb, var(--color-surface) 70%, white) 30%,
+        color-mix(in srgb, var(--color-line) 70%, white) 100%
+    );
+    background-size: 200% 100%;
+    animation: customer-skeleton-shimmer 1.2s ease-in-out infinite;
+}
+
+.skeleton--name   { width: min(45%, 260px); height: 26px; border-radius: 4px; }
+.skeleton--status { width: 88px; height: 14px; }
+.skeleton--label  { width: 84px; height: 10px; }
+.skeleton--value  { width: min(80%, 220px); height: 14px; }
+
+@keyframes customer-skeleton-shimmer {
+    0%   { background-position: 200% 0; opacity: 0.7; }
+    50%  { opacity: 1; }
+    100% { background-position: -200% 0; opacity: 0.7; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .skeleton {
+        animation: none;
+        background-position: 0 0;
+    }
+}
+
+@media (max-width: 768px) {
+    .fiche__specs {
+        grid-template-columns: 1fr;
+    }
+}
