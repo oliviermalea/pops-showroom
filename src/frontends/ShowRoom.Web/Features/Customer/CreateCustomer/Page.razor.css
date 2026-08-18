@@ -1,0 +1,226 @@
+/* ==========================================================================
+   Customer — création (mêmes tokens que le reste du front)
+   ========================================================================== */
+
+.create {
+    display: grid;
+    grid-template-columns: 3fr 9fr;
+    gap: var(--space-8);
+    align-items: start;
+    padding: 0;
+}
+
+.create__meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-1);
+    padding-top: 10px;
+}
+
+.module-tag {
+    display: inline-block;
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-features);
+    border: 1px solid var(--color-features);
+    padding: 4px var(--space-2);
+    border-radius: 2px;
+    width: fit-content;
+}
+
+.create__body {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.create__title {
+    font-size: var(--font-size-2xl);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: var(--line-height-tight);
+    color: var(--color-ink);
+}
+
+.create__intro {
+    font-size: var(--font-size-sm);
+    color: var(--color-muted);
+    line-height: var(--line-height-loose);
+    max-width: var(--max-col-text);
+}
+
+.create__intro code {
+    font-family: var(--font-mono-stack);
+    font-size: 0.85em;
+    background-color: var(--color-surface);
+    padding: 2px 6px;
+    border-radius: 2px;
+    word-break: break-all;
+}
+
+/* --- Formulaire ---------------------------------------------------------- */
+
+/* `EditForm` et `InputText` rendent leur propre balise : ces elements ne portent PAS l'attribut de
+   scope de cette page, donc leurs regles passent par `::deep` (ancree sur `.create__body`, qui lui
+   est bien scope). Les elements ecrits directement dans Page.razor (.form__field, .form__label,
+   .form__actions, boutons) restent en selecteur scope normal. */
+.create__body ::deep .form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    max-width: 560px;
+}
+
+.form__field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    border-top: 1px solid var(--color-line);
+    padding-top: var(--space-2);
+}
+
+.form__label {
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-application);
+}
+
+.form__optional {
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    text-transform: none;
+    color: var(--color-muted);
+}
+
+.create__body ::deep .form__input {
+    width: 100%;
+    min-height: 44px;
+    padding: 0 var(--space-2);
+    font-family: inherit;
+    font-size: var(--font-size-base);
+    color: var(--color-ink);
+    background-color: var(--color-white);
+    border: 1px solid var(--color-line);
+    border-radius: 2px;
+    transition: border-color var(--transition-fast);
+}
+
+.create__body ::deep .form__input:focus {
+    outline: none;
+    border-color: var(--color-features);
+}
+
+.create__body ::deep .form__input:disabled {
+    background-color: var(--color-surface);
+    color: var(--color-muted);
+}
+
+.form__error {
+    font-size: var(--font-size-sm);
+    line-height: var(--line-height-loose);
+    color: var(--color-domain);
+    border-left: 2px solid var(--color-features);
+    padding-left: var(--space-2);
+}
+
+.form__actions {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-1);
+}
+
+.form__submit,
+.form__secondary {
+    min-height: 44px;
+    padding: 0 var(--space-3);
+    font-family: inherit;
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.form__submit {
+    color: var(--color-white);
+    background-color: var(--color-features);
+    border: 1px solid var(--color-features);
+}
+
+.form__submit:hover:not(:disabled) {
+    background-color: var(--color-domain);
+    border-color: var(--color-domain);
+}
+
+.form__secondary {
+    color: var(--color-domain);
+    background-color: transparent;
+    border: 1px solid var(--color-line);
+}
+
+.form__secondary:hover:not(:disabled) {
+    border-color: var(--color-features);
+    color: var(--color-features);
+}
+
+.form__submit:disabled,
+.form__secondary:disabled {
+    cursor: not-allowed;
+    color: var(--color-muted);
+    background-color: var(--color-surface);
+    border-color: var(--color-line);
+}
+
+.form__cancel {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+    border-bottom: 1px solid transparent;
+}
+
+.form__cancel:hover {
+    color: var(--color-features);
+    border-bottom-color: var(--color-features);
+}
+
+@media (max-width: 1024px) {
+    .create {
+        grid-template-columns: 1fr;
+        gap: var(--space-3);
+    }
+
+    .create__meta {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-2);
+        padding-top: 0;
+    }
+}
+
+@media (max-width: 768px) {
+    .form__actions {
+        gap: var(--space-1);
+    }
+
+    .form__submit,
+    .form__secondary {
+        flex: 1 1 auto;
+    }
+}

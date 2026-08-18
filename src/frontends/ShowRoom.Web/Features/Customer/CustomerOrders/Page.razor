@@ -1,0 +1,120 @@
+@page "/customers/{PublicId}/orders"
+@using ShowRoom.Web.Features.Customer
+@inject ICustomerFacade CustomerFacade
+
+<PageTitle>@PageTitleText</PageTitle>
+
+<section class="orders" aria-labelledby="orders-title">
+    <div class="orders__meta">
+        <p class="section-label">Module Customer</p>
+        <span class="module-tag">Commandes</span>
+    </div>
+
+    <div class="orders__body">
+        <div class="orders__header">
+            <h1 class="orders__title" id="orders-title">Historique des commandes</h1>
+            <a class="orders__action" href="@($"/customers/{PublicId}")">Retour à la fiche</a>
+        </div>
+
+        @if (isLoading)
+        {
+            <p class="orders__state" role="status" aria-live="polite">Chargement de l'historique…</p>
+        }
+        else if (result is null)
+        {
+            <p class="orders__state"></p>
+        }
+        else
+        {
+            switch (result.Outcome)
+            {
+                case CustomerLookupOutcome.Found when result.Customer is { } customer:
+                    <p class="orders__customer">
+                        <span class="orders__customer-name">@customer.DisplayName</span>
+                        <span class="orders__customer-email">@customer.Email</span>
+                    </p>
+
+                    @if (!customer.OrdersAvailable)
+                    {
+                        @* Dégradation gracieuse : le client est connu, mais le service Order n'a pas
+                           répondu sur le bus. Ce n'est pas une erreur de la requête. *@
+                        <div class="degraded" role="status" aria-live="polite">
+                            <p class="degraded__title">Historique temporairement indisponible</p>
+                            <p class="degraded__text">
+                                Le service Order n'a pas répondu sur le bus AMQP. La fiche client reste
+                                exacte ; seules les commandes manquent.
+                            </p>
+                            <button type="button" class="degraded__retry" @onclick="LoadAsync">Réessayer</button>
+                        </div>
+                    }
+                    else if (customer.IsEmpty)
+                    {
+                        <p class="orders__state orders__state--muted">
+                            Ce client n'a pas encore passé de commande.
+                        </p>
+                    }
+                    else
+                    {
+                        <ol class="orders__list" role="list">
+                            @foreach (var order in customer.Orders)
+                            {
+                                <li @key="order.PublicId">
+                                    <CustomerOrderCard Order="order" />
+                                </li>
+                            }
+                        </ol>
+                    }
+                    break;
+
+                case CustomerLookupOutcome.InvalidPublicId:
+                    <p class="orders__state orders__state--error" role="alert">
+                        Identifiant invalide : un <code>PublicId</code> ShowRoom s'écrit
+                        <code>cus_</code> suivi de 32 caractères hexadécimaux.
+                    </p>
+                    break;
+
+                case CustomerLookupOutcome.NotFound:
+                    <p class="orders__state orders__state--error" role="alert">
+                        Aucun client ne correspond à <code>@PublicId</code>.
+                    </p>
+                    break;
+
+                default:
+                    <div class="orders__state orders__state--error" role="alert">
+                        <p>Le service Customer est momentanément indisponible.</p>
+                        <button type="button" class="orders__retry" @onclick="LoadAsync">Réessayer</button>
+                    </div>
+                    break;
+            }
+        }
+    </div>
+</section>
+
+@code {
+    [Parameter]
+    public string? PublicId { get; set; }
+
+    private CustomerOrdersResult? result;
+    private bool isLoading;
+
+    private string PageTitleText => result?.Customer is { } customer
+        ? $"Commandes de {customer.DisplayName} — ShowRoom"
+        : "Commandes — ShowRoom";
+
+    protected override Task OnParametersSetAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        result = null;
+
+        try
+        {
+            result = await CustomerFacade.GetCustomerOrdersAsync(PublicId);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

@@ -1,0 +1,120 @@
+.order {
+    border-top: 2px solid var(--color-features);
+    padding-top: var(--space-2);
+}
+
+.order__header {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-bottom: var(--space-2);
+}
+
+.order__identity {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.order__id {
+    font-family: var(--font-mono-stack);
+    font-size: var(--font-size-xs);
+    color: var(--color-muted);
+    word-break: break-all;
+    max-width: 100%;
+}
+
+.order__date {
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+    color: var(--color-ink);
+}
+
+.order__figures {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.order__status {
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-application);
+    border: 1px solid var(--color-line);
+    border-radius: 2px;
+    padding: 2px var(--space-1);
+    white-space: nowrap;
+}
+
+.order__items {
+    font-size: var(--font-size-xs);
+    color: var(--color-muted);
+    white-space: nowrap;
+}
+
+.order__total {
+    font-size: var(--font-size-lg);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--color-domain);
+    white-space: nowrap;
+}
+
+/* Le tableau défile dans son propre conteneur : la page ne déborde jamais. */
+.table-scroll {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.lines {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-sm);
+}
+
+.lines__caption {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.lines th {
+    text-align: left;
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-application);
+    border-bottom: 1px solid var(--color-line);
+    padding: var(--space-1) var(--space-2) var(--space-1) 0;
+    white-space: nowrap;
+}
+
+.lines td {
+    border-bottom: 1px solid var(--color-line);
+    padding: var(--space-1) var(--space-2) var(--space-1) 0;
+    color: var(--color-ink);
+    vertical-align: baseline;
+}
+
+.lines__num {
+    text-align: right;
+    padding-right: 0;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.lines__total {
+    font-weight: 700;
+}

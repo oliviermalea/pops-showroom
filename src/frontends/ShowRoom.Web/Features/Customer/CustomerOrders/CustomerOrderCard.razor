@@ -1,0 +1,47 @@
+@* Une commande : en-tête (id public, date, statut, total) + le détail de ses lignes. *@
+
+<article class="order">
+    <header class="order__header">
+        <div class="order__identity">
+            <code class="order__id">@Order.PublicId</code>
+            <span class="order__date">@Order.OrderDate</span>
+        </div>
+
+        <div class="order__figures">
+            <span class="order__status">@Order.Status</span>
+            <span class="order__items">@Order.ItemCount</span>
+            <span class="order__total">@Order.TotalAmount</span>
+        </div>
+    </header>
+
+    <div class="table-scroll">
+        <table class="lines">
+            <caption class="lines__caption">Lignes de la commande @Order.PublicId</caption>
+            <thead>
+                <tr>
+                    <th scope="col">Produit</th>
+                    <th scope="col" class="lines__num">Qté</th>
+                    <th scope="col" class="lines__num">Prix unitaire</th>
+                    <th scope="col" class="lines__num">Total ligne</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var line in Order.Lines)
+                {
+                    <tr @key="line.ProductPublicId">
+                        <td>@line.ProductName</td>
+                        <td class="lines__num">@line.Quantity</td>
+                        <td class="lines__num">@line.UnitPrice</td>
+                        <td class="lines__num lines__total">@line.LineTotal</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</article>
+
+@code {
+    [Parameter]
+    [EditorRequired]
+    public CustomerOrderView Order { get; set; } = default!;
+}

@@ -1,0 +1,33 @@
+@page "/Error"
+@using System.Diagnostics
+
+<PageTitle>Erreur — ShowRoom</PageTitle>
+
+<section class="status-page">
+    <p class="section-label">Erreur</p>
+    <h1 class="status-page__title">Une erreur est survenue.</h1>
+    <p class="status-page__text">
+        La requête n'a pas pu être traitée. L'incident est tracé côté serveur.
+    </p>
+
+    @if (ShowRequestId)
+    {
+        <p class="status-page__trace">
+            Identifiant de corrélation : <code>@RequestId</code>
+        </p>
+    }
+
+    <a href="/" class="status-page__link">Retour à l'accueil</a>
+</section>
+
+@code {
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    private string? RequestId { get; set; }
+
+    private bool ShowRequestId => !string.IsNullOrEmpty(RequestId);
+
+    protected override void OnInitialized() =>
+        RequestId = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
+}

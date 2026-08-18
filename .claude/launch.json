@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "showroom-web",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "src/frontends/ShowRoom.Web/ShowRoom.Web.csproj", "--launch-profile", "http"],
+      "port": 5206
+    },
+    {
+      "name": "showroom-aspire",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "src/aspire/ShowRoom.AppHost/ShowRoom.AppHost.csproj"],
+      "port": 5206
+    }
+  ]
+}

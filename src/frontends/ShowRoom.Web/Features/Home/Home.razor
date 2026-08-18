@@ -1,0 +1,252 @@
+@page "/"
+
+<PageTitle>ShowRoom</PageTitle>
+
+<!-- ================================================================ -->
+<!-- Hero                                                              -->
+<!-- ================================================================ -->
+<section class="hero" aria-labelledby="hero-title">
+    <div class="hero__content">
+        <p class="hero__eyebrow">Modulith → distribué</p>
+        <h1 class="hero__title" id="hero-title">ShowRoom</h1>
+        <p class="hero__lead">
+            Une plateforme .NET 10 qui montre comment isoler des bounded
+            contexts, les faire dialoguer par messaging asynchrone et rester
+            diagnosable de bout en bout.
+        </p>
+    </div>
+
+    <div class="hero__diagram">
+        <svg viewBox="0 0 480 320" fill="none" xmlns="http://www.w3.org/2000/svg"
+             class="arch-diagram" role="img" aria-label="Topologie ShowRoom : le front Blazor appelle en HTTP les services Business et Customer, qui dialoguent par RabbitMQ et partagent la base PostgreSQL showroom, le tout orchestré par Aspire">
+            <!-- Web client -->
+            <rect x="160" y="8" width="160" height="48" rx="2" fill="var(--color-features)" />
+            <text x="240" y="33" text-anchor="middle"
+                  font-family="Helvetica Neue, Helvetica, Arial, sans-serif"
+                  font-size="11" font-weight="700" fill="#ffffff" letter-spacing="0.5">SHOWROOM</text>
+            <text x="240" y="48" text-anchor="middle"
+                  font-family="Helvetica Neue, Helvetica, Arial, sans-serif"
+                  font-size="10" fill="#ffffff" opacity="0.8">.Web</text>
+
+            <!-- HTTP fan-out -->
+            <line x1="240" y1="56" x2="240" y2="72" stroke="var(--color-domain)" stroke-width="1.5" />
+            <line x1="115" y1="72" x2="365" y2="72" stroke="var(--color-domain)" stroke-width="1.5" />
+            <line x1="115" y1="72" x2="115" y2="80" stroke="var(--color-domain)" stroke-width="1.5" />
+            <line x1="365" y1="72" x2="365" y2="80" stroke="var(--color-domain)" stroke-width="1.5" />
+            <polygon points="110,80 120,80 115,88" fill="var(--color-domain)" />
+            <polygon points="360,80 370,80 365,88" fill="var(--color-domain)" />
+            <text x="248" y="68"
+                  font-family="Helvetica Neue, Helvetica, Arial, sans-serif"
+                  font-size="9" fill="var(--color-muted)" letter-spacing="0.4">HTTP</text>
+
+            <!-- Services -->
+            <rect x="30" y="88" width="170" height="56" rx="2" fill="var(--color-surface)" stroke="var(--color-features)" stroke-width="1.5" />
+            <text x="115" y="112" text-anchor="middle"
+                  font-family="Helvetica Neue, Helvetica, Arial, sans-serif"
+                  font-size="10" font-weight="700" fill="var(--color-features)" letter-spacing="0.3">BUSINESS.API</text>
+            <text x="115" y="129" text-anchor="middle"
+                  font-family="Helvetica Neue, Helvetica, Arial, sans-serif"
+                  font-size="9" fill="var(--color-muted)">Order · Product</text>
+
+            <rect x="280" y="88" width="170" height="56" rx="2" fill="var(--color-surface)" stroke="var(--color-features)" stroke-width="1.5" />
+            <text x="365" y="112" text-anchor="middle"
+                  font-family="Helvetica Neue, Helvetica, Arial, sans-serif"
+                  font-size="10" font-weight="700" fill="var(--color-features)" letter-spacing="0.3">CUSTOMER.API</text>
+            <text x="365" y="129" text-anchor="middle"
+                  font-family="Helvetica Neue, Helvetica, Arial, sans-serif"
+                  font-size="9" fill="var(--color-muted)">Customer</text>
+
+            <!-- Broker -->
+            <line x1="200" y1="116" x2="212" y2="116" stroke="var(--color-domain)" stroke-width="1" stroke-dasharray="3 3" />
+            <line x1="268" y1="116" x2="280" y2="116" stroke="var(--color-domain)" stroke-width="1" stroke-dasharray="3 3" />
+            <rect x="212" y="98" width="56" height="36" rx="2" fill="var(--color-presentation)" stroke="var(--color-domain)" stroke-width="1" />
+            <text x="240" y="114" text-anchor="middle"
+                  font-family="Helvetica Neue, Helvetica, Arial, sans-serif"
+                  font-size="9" font-weight="700" fill="var(--color-domain)" letter-spacing="0.3">AMQP</text>
+            <text x="240" y="127" text-anchor="middle"
+                  font-family="Helvetica Neue, Helvetica, Arial, sans-serif"
+                  font-size="8" fill="var(--color-application)">RabbitMQ</text>
+
+            <!-- Database -->
+            <line x1="115" y1="144" x2="115" y2="176" stroke="var(--color-line)" stroke-width="1" />
+            <line x1="365" y1="144" x2="365" y2="176" stroke="var(--color-line)" stroke-width="1" />
+            <rect x="30" y="176" width="420" height="56" rx="2" fill="var(--color-surface)" stroke="var(--color-domain)" stroke-width="1.5" />
+            <text x="240" y="200" text-anchor="middle"
+                  font-family="Helvetica Neue, Helvetica, Arial, sans-serif"
+                  font-size="11" font-weight="700" fill="var(--color-domain)" letter-spacing="0.2">POSTGRESQL · showroom</text>
+            <text x="240" y="217" text-anchor="middle"
+                  font-family="Helvetica Neue, Helvetica, Arial, sans-serif"
+                  font-size="9" fill="var(--color-muted)">customers · orders · products · wolverine</text>
+
+            <!-- Foundation -->
+            <line x1="240" y1="232" x2="240" y2="256" stroke="var(--color-line)" stroke-width="1" />
+            <rect x="30" y="256" width="420" height="48" rx="2" fill="var(--color-presentation)" stroke="var(--color-infrastructure)" stroke-width="1.5" />
+            <text x="240" y="281" text-anchor="middle"
+                  font-family="Helvetica Neue, Helvetica, Arial, sans-serif"
+                  font-size="11" font-weight="700" fill="var(--color-domain)" letter-spacing="0.2">FOUNDATION</text>
+            <text x="240" y="296" text-anchor="middle"
+                  font-family="Helvetica Neue, Helvetica, Arial, sans-serif"
+                  font-size="9" fill="var(--color-muted)">Aspire · ServiceDefaults · OpenTelemetry</text>
+        </svg>
+    </div>
+</section>
+
+<div class="rule"></div>
+
+<!-- ================================================================ -->
+<!-- Manifeste                                                         -->
+<!-- ================================================================ -->
+<section class="manifeste" aria-labelledby="manifeste-title">
+    <div class="manifeste__label">
+        <p class="section-label">Manifeste</p>
+    </div>
+    <div class="manifeste__body">
+        <h2 class="manifeste__title" id="manifeste-title">
+            Un module ne devient un service
+            que le jour où c'est un choix.
+        </h2>
+        <p class="manifeste__text">
+            ShowRoom part d'un modulith : des bounded contexts isolés dans un
+            même processus, avec des frontières explicites et aucun couplage
+            caché. Extraire un module dans son propre service devient alors
+            une décision de déploiement, pas une réécriture.
+        </p>
+        <p class="manifeste__text">
+            Les modules ne se parlent jamais par la base ni par HTTP interne :
+            uniquement par contrats de messages sur le bus. Ce qui est livré
+            est versionné, testé et observable de bout en bout.
+        </p>
+    </div>
+</section>
+
+<div class="rule"></div>
+
+<!-- ================================================================ -->
+<!-- Principes — les 3 piliers                                        -->
+<!-- ================================================================ -->
+<section class="principes" id="principes" aria-labelledby="principes-title">
+    <div class="principes__header">
+        <p class="section-label">Principes</p>
+        <h2 class="principes__title" id="principes-title">Trois piliers.<br />Une seule trace.</h2>
+    </div>
+
+    <ol class="pillars" role="list">
+        <li class="pillar pillar--active">
+            <span class="pillar__number" aria-hidden="true">01</span>
+            <div class="pillar__content">
+                <h3 class="pillar__name">Frontières</h3>
+                <p class="pillar__desc">
+                    Chaque bounded context est un module vertical : Domain pur,
+                    Persistence dédiée, Features en slices. Les dépendances sont
+                    tenues par des tests d'architecture, pas par la discipline.
+                </p>
+                <ul class="pillar__items" aria-label="Éléments Frontières">
+                    <li>Modulith + Vertical Slice</li>
+                    <li>StronglyTypedId & PublicId</li>
+                    <li>Contrats *.Contracts isolés</li>
+                    <li>Architecture tests (ArchUnitNET)</li>
+                </ul>
+            </div>
+            <div class="pillar__status pillar__status--live" aria-label="En place">
+                <span class="status-dot"></span>En place
+            </div>
+        </li>
+
+        <li class="pillar pillar--active">
+            <span class="pillar__number" aria-hidden="true">02</span>
+            <div class="pillar__content">
+                <h3 class="pillar__name">Messaging</h3>
+                <p class="pillar__desc">
+                    Toute communication machine-à-machine passe par RabbitMQ via
+                    Wolverine : request/reply pour lire, outbox transactionnel
+                    pour publier — jamais un appel HTTP entre services.
+                </p>
+                <ul class="pillar__items" aria-label="Éléments Messaging">
+                    <li>Request/reply AMQP</li>
+                    <li>Outbox transactionnel</li>
+                    <li>Inbox durable & dead-letter</li>
+                    <li>Dégradation gracieuse</li>
+                </ul>
+            </div>
+            <div class="pillar__status pillar__status--live" aria-label="En place">
+                <span class="status-dot"></span>En place
+            </div>
+        </li>
+
+        <li class="pillar">
+            <span class="pillar__number" aria-hidden="true">03</span>
+            <div class="pillar__content">
+                <h3 class="pillar__name">Observabilité</h3>
+                <p class="pillar__desc">
+                    Le contexte de trace traverse le broker : le span du
+                    consommateur rejoint celui du producteur. Logs structurés,
+                    métriques métier et santé exposés par défaut.
+                </p>
+                <ul class="pillar__items" aria-label="Éléments Observabilité">
+                    <li>Traces distribuées OTel</li>
+                    <li>BeginModuleScope</li>
+                    <li>Métriques messaging</li>
+                    <li>Health & readiness</li>
+                </ul>
+            </div>
+            <div class="pillar__status pillar__status--wip" aria-label="En cours">
+                <span class="status-dot"></span>En cours
+            </div>
+        </li>
+    </ol>
+</section>
+
+<div class="rule"></div>
+
+<!-- ================================================================ -->
+<!-- Modules                                                           -->
+<!-- ================================================================ -->
+<section class="module-focus" id="modules" aria-labelledby="modules-title">
+    <div class="module-focus__meta">
+        <p class="section-label">Modules actifs</p>
+        <span class="module-tag">Customer</span>
+        <span class="module-tag">Order</span>
+        <span class="module-tag">Product</span>
+    </div>
+
+    <div class="module-focus__body">
+        <h2 class="module-focus__title" id="modules-title">
+            Trois contextes.<br />Deux services.
+        </h2>
+        <p class="module-focus__desc">
+            Un client consulte son profil, l'historique de ses commandes et le
+            détail d'un produit. Customer vit dans son propre service et
+            interroge Order sur le bus ; Order et Product cohabitent dans le
+            service Business. Aucun n'accède aux données de l'autre.
+        </p>
+
+        <dl class="module-specs">
+            <div class="module-spec">
+                <dt>Endpoint</dt>
+                <dd><code>GET /api/v1/customers/{publicId}</code></dd>
+            </div>
+            <div class="module-spec">
+                <dt>Identifiants</dt>
+                <dd>PublicId exposé — identifiant technique interne</dd>
+            </div>
+            <div class="module-spec">
+                <dt>Inter-modules</dt>
+                <dd>Request/reply Wolverine sur <code>RabbitMQ</code></dd>
+            </div>
+            <div class="module-spec">
+                <dt>Persistance</dt>
+                <dd>Un schéma PostgreSQL par module</dd>
+            </div>
+            <div class="module-spec">
+                <dt>Observabilité</dt>
+                <dd>Traces structurées par <code>BeginModuleScope</code></dd>
+            </div>
+            <div class="module-spec">
+                <dt>Tests</dt>
+                <dd>Endpoints · Domain · Architecture</dd>
+            </div>
+        </dl>
+    </div>
+</section>
+
+<div class="rule"></div>

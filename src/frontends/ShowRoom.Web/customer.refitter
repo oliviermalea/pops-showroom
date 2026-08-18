@@ -1,0 +1,28 @@
+{
+  "$schema": "https://refitter.github.io/static/schema.json",
+  "openApiPath": "http://localhost:5205/openapi/v1.json",
+  "namespace": "ShowRoom.Web.Infrastructure.Api.Refit.Customer",
+  "contractsNamespace": "ShowRoom.Web.Infrastructure.Api.Refit.Customer.Models",
+  "outputFolder": "Infrastructure/Api/Refit/Customer",
+  "contractsOutputFolder": "Infrastructure/Api/Refit/Customer/Models",
+  "generateClients": true,
+  "generateContracts": true,
+  "generateMultipleFiles": true,
+  "generateXmlDocCodeComments": true,
+  "generateDisposableClients": false,
+  "generateDefaultAdditionalProperties": false,
+  "useCancellationTokens": true,
+  "optionalParameters": true,
+  "immutableRecords": true,
+  "returnIApiResponse": true,
+  "trimUnusedSchema": true,
+  "typeAccessibility": "Public",
+  "multipleInterfaces": "ByTag",
+  "operationNameTemplate": "{operationName}Async",
+  "naming": {
+    "useOpenApiTitle": false,
+    "interfaceName": "Customer"
+  },
+  "includeTags": [ "Customer" ],
+  "includePathMatches": [ "/api/v1/customers.*" ]
+}

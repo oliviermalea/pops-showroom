@@ -313,7 +313,7 @@ The project-specific structure for `src/frontends/ShowRoom.Web` must follow this
 - Technical shell components (`App.razor`, routing, layouts, error/not-found surfaces, reconnect UI) must live under `App/` and use `App/_Imports.razor` for local shared imports.
 - Feature-specific static assets should be colocated under `wwwroot/<Feature>/...` and imported from the feature that owns them.
 - Reusable UI belongs in `Shared/Components` or `Shared/Layout`; domain pages and their local parts stay inside `Features/<Domain>/<Screen>`.
-- Kiota-generated API clients and models must live under `Infrastructure/Api/Generated`, with manual registration/configuration kept in `Infrastructure/Api`.
+- Typed API clients are **Refit** interfaces under `Infrastructure/Api/Refit/<Module>/` (contracts in `.../<Module>/Models/`), registered from `Infrastructure/Api/RefitRegistration.cs`. Kiota is not used in ShowRoom.
 
 ---
 
@@ -326,17 +326,155 @@ The project-specific structure for `src/frontends/ShowRoom.Web` must follow this
 - Messages d'erreur en francais, orientes utilisateur final.
 
 ### Facade
-- Un seul <Module>Facade par module, injecte en Scoped.
+- Un seul <Module>Facade par module, injecte en Scoped, derriere une interface `I<Module>Facade`
+  (placee a la racine de `Features/<Module>/`, partagee par tous les ecrans du module).
 - Blazor ne reference jamais le client d'API genere directement.
 - Transformations (formatage, mapping DTO <-> view model) dans la Facade, pas dans le composant.
+
+### Client d'API (valide — etape « detail client »)
+- **Refit**, jamais Kiota, jamais un `HttpClient` nu dans un composant. L'interface vit dans
+  `Infrastructure/Api/Refit/<Module>/I<Module>Api.cs`, ses contrats de transport dans
+  `.../<Module>/Models/`, l'enregistrement dans `Infrastructure/Api/RefitRegistration.cs`.
+- Enregistrer via `AddRefitClient<T>(settings).ConfigureHttpClient(...)` pour passer par
+  `IHttpClientFactory` : on herite du service discovery Aspire et du handler de resilience de
+  ServiceDefaults, et les appels sortants rejoignent la trace distribuee.
+- Les methodes renvoient `ApiResponse<T>` (jamais `T` nu) : un `404`/`400` porte une **issue metier**,
+  traitee comme une donnee, pas comme une exception. La facade traduit les statuts en enum d'issue
+  (`Found` / `InvalidPublicId` / `NotFound` / `Unavailable`) et degrade toute panne transport en
+  `Unavailable` — l'ecran ne doit jamais remonter une exception non geree.
+- **Approche selective assumee** : interface ecrite a la main tant que la surface consommee est
+  etroite ; generation **Refitter** (`<module>.refitter` a la racine du projet web,
+  `refitter --settings-file ...`) quand elle s'elargit. La facade est la seule frontiere : passer de
+  l'un a l'autre ne doit toucher aucun appelant.
+- Cles Refitter valides a connaitre : `multipleInterfaces` (et non `generateMultipleInterfaces`),
+  `optionalParameters` (et non `generateOptionalParameters`), `operationNameTemplate` au niveau racine
+  (l'objet `naming` ne porte que `useOpenApiTitle` et `interfaceName`). `useSystemTextJson`,
+  `jsonSerializerOptions`, `typeForAdditionalProperties`, `generateResultTypes` n'existent pas cote
+  Refitter (ce sont des reglages NSwag) : la serialisation se configure dans les `RefitSettings` a
+  l'enregistrement.
+- Le format d'un identifiant public (`abc_` + 32 hex) est verifie au boundary avant l'appel
+  (`Infrastructure/PublicIds/PublicIdFormat`) : message precis cote UI et requete inutile evitee.
+  L'autorite sur le format reste le backend.
+
+### Etats d'ecran (valide — etape « detail client »)
+- Un ecran de donnees expose une branche par etat : chargement, vide/invite, invalide, introuvable,
+  indisponible (avec action « Reessayer »), succes. Chaque etat porte le role ARIA adapte
+  (`role="status"` + `aria-live` pour le chargement, `role="alert"` pour les erreurs).
+- Le composant ne formate rien : un `<Ecran>Mapper.FromApi(dto)` produit un view model deja
+  presentable (placeholder `—` pour une valeur absente, date localisee, booleen derive du statut).
+  Ce mapper est teste unitairement (nominal + cas limites), au meme titre qu'un assembleur backend.
+- Un stub ecrit a la main de l'interface Refit suffit a tester la facade (aucun framework de mock) :
+  un `ApiResponse<T>` se construit avec `new ApiResponse<T>(new HttpResponseMessage(status), content,
+  new RefitSettings())`.
 
 ### Formulaire
 - Action principale + action secondaire (le cas echeant) + lien Annuler.
 - disabled=isSubmitting pendant soumission, message erreur si echec reseau.
 - NavigationManager.NavigateTo apres succes. Jamais d'identifiants techniques dans le formulaire.
 
+### Formulaire — regles validees (etape « creation client »)
+- Le validateur client reproduit les contraintes du backend (obligatoire, longueurs, format) pour un
+  retour immediat, mais le backend reste l'autorite : une regle qui ne peut etre tranchee que cote
+  serveur (unicite d'un email) revient en issue metier (409) et s'affiche en erreur de formulaire,
+  sans quitter la page.
+- `.Cascade(CascadeMode.Stop)` sur un champ enchainant `NotEmpty` + format : sinon un champ vide
+  affiche « obligatoire » ET « format invalide ».
+- Le `FluentValidationValidator` valide tout le modele a la soumission, mais sur un `OnFieldChanged`
+  il ne remplace QUE les messages du champ concerne (`messageStore.Clear(field)` puis re-ajout des
+  seules erreurs de ce champ) : vider tout le store ferait apparaitre des erreurs sur des champs
+  jamais touches, et ne clearer que le champ en re-ajoutant toutes les erreurs duplique les messages
+  des autres champs.
+- **CSS scope et composants enfants** : `EditForm`, `InputText`, `ValidationMessage` rendent leur
+  propre balise, qui ne porte PAS l'attribut de scope de la page — un `.form__input { ... }` dans
+  `Page.razor.css` ne s'applique donc jamais. Passer par `::deep` ancre sur un element de la page
+  (`.<page>__body ::deep .form__input`), ou styler globalement dans `app.css`. Verifier le style
+  reellement calcule (hauteur de champ, bordure) avant de considerer un formulaire termine.
+- **Reponse `201` renvoyant un identifiant nu** : Refit renvoie le corps **brut** pour un resultat
+  `string` (il ne passe pas par le serialiseur JSON), donc un corps `"cus_…"` conserve ses guillemets.
+  Les desencadrer dans la facade avant toute navigation, sinon ils finissent dans l'URL.
+
 ### CSS scope
 - Page.razor.css scope isole par page. Variables design system uniquement (--color-*, --space-*, --font-size-*).
 
 ### Navigation
 - Page liste : lien action principal dans le header. Modele POCO pur + validateur separe.
+
+### Degradation cross-service (valide — etape « commandes du client »)
+- Un backend qui agrege d'autres services peut repondre `200` avec un **succes partiel** (ex.
+  `ordersAvailable = false`). L'ecran doit rendre cette nuance : garder ce qui est connu (l'identite du
+  client), afficher une banniere `role="status"` (pas `role="alert"` : ce n'est pas une erreur de la
+  requete) expliquant QUEL service manque, et proposer « Reessayer ». Ne jamais aplatir ce cas en
+  « indisponible » ni en « aucune donnee ».
+- Le view model distingue explicitement les trois cas : `OrdersAvailable=false` (degrade),
+  `IsEmpty` (le service a repondu, il n'y a rien), `HasOrders`. Un booleen unique ne suffit pas.
+- La facade **loggue le succes partiel en `LogWarning`** : sans cela la degradation est invisible en
+  production (le HTTP est un 200).
+- **Budget de temps du client HTTP** : un chemin de degradation ne repond qu'une fois le budget de
+  retries du backend epuise. Mesurer ce pire cas, puis configurer le client pour le depasser —
+  `AddStandardResilienceHandler` de ServiceDefaults coupe par defaut a **10 s par tentative**, ce qui
+  tue la reponse degradee et la transforme en « service indisponible ». Remplacer le pipeline pour ce
+  client (`RemoveAllResilienceHandlers` — API experimentale, suppression `EXTEXP0001` a scoper — puis
+  `AddStandardResilienceHandler(options => …)`), et reduire les retries : re-jouer un appel agregeant
+  de 16 s n'apporte aucune information.
+
+### Etat de chargement (valide — etape « squelette de liste »)
+- Un ecran de donnees n'affiche pas « Chargement… » : il rend un **squelette** qui reproduit la
+  structure reelle (memes colonnes, memes metriques de ligne), pour que l'arrivee des donnees soit une
+  substitution et non un saut de mise en page.
+- Le squelette porte `role="status"` + `aria-busy="true"` + `aria-live="polite"` + un `aria-label`
+  explicite ; ses lignes sont `aria-hidden="true"` (des barres decoratives n'ont rien a annoncer).
+- **Duree minimale d'affichage** (~350 ms) : une reponse en 30 ms ferait clignoter le squelette, plus
+  perturbant que pas d'indicateur. Mesurer avec un `Stopwatch` et completer par un `Task.Delay` avant
+  d'exposer le resultat.
+- Le nombre de lignes du squelette **reprend celui de la page qu'il remplace** (memorise au dernier
+  chargement reussi, valeur par defaut sinon) : le bloc garde sa hauteur d'une page a l'autre.
+- Les elements peripheriques qui disparaissent pendant le chargement (pagination, compteur) restent
+  **rendus** et sont masques en `visibility: hidden` — jamais retires du DOM : `display: none` libere
+  leur place et fait sauter le contenu au retour des donnees.
+- Le scintillement est un `@keyframes` sur un `linear-gradient` (`background-size: 200% 100%`), et le
+  panneau de resultat arrive en fondu court. Les deux sont **desactives** sous
+  `@media (prefers-reduced-motion: reduce)`.
+
+### Liste paginee (valide — etape « liste clients »)
+- L'etat de la liste (page, filtres) vit dans la **query string**, jamais dans un champ prive :
+  `[SupplyParameterFromQuery]` + `NavigationManager.NavigateTo("/x?page=2&search=…")`. L'ecran reste
+  partageable par URL et le bouton Retour du navigateur fonctionne. Ne pas serialiser les valeurs par
+  defaut (`page=1`, recherche vide) : l'URL canonique reste propre.
+- Le composant d'une page nommee `Page.razor` s'appelle `Page` : un parametre `Page` ne compile pas
+  (CS0542). Nommer la propriete `PageNumber` et mapper la cle via
+  `[SupplyParameterFromQuery(Name = "page")]`.
+- La facade **normalise** page et pageSize (bornes min/max) avant l'appel : une query string editee a
+  la main ne doit jamais produire un 400 backend.
+- Le view model expose l'etat de navigation **derive** (`HasPrevious`, `HasNext`, `FirstItemIndex`,
+  `LastItemIndex`, `IsEmpty`) — le composant n'ecrit aucun calcul. Ne pas se fier aux champs
+  `hasPrevious`/`hasNext` renvoyes par l'API : les rederiver des numeros de page.
+- Etat vide **contextuel** : « aucun element » et « aucun resultat pour tel filtre » sont deux
+  messages distincts.
+- Donnees tabulaires = vraie `<table>` (`<caption>` en classe visually-hidden, `<th scope="col">`),
+  enveloppee dans un conteneur `overflow-x: auto`. En mobile, masquer la ou les colonnes secondaires
+  plutot que d'imposer un defilement horizontal.
+- Le formatage partage par plusieurs ecrans d'un meme module (date, placeholder, libelle de statut)
+  va dans un `<Module>Format` unique : une fiche et une ligne de liste doivent afficher la meme
+  donnee de la meme facon.
+
+### Design system swiss (valide — etape « page d'accueil »)
+- Un seul point de definition des tokens : `wwwroot/app.css` (`--color-*`, `--space-*`, `--font-size-*`,
+  `--line-height-*`, `--transition-*`, `--container-*`, `--max-col-text`). Aucune valeur brute (hex, px
+  de couleur, famille de police) dans un `*.razor.css` : uniquement `var(--token)`.
+- Style suisse : Helvetica Neue, echelle d'espacement en multiples de 8px, aplats et filets 1px
+  (`.rule`), rayons quasi nuls (2px max), libelles de section en capitales espacees (`.section-label`),
+  aucun framework CSS (pas de Bootstrap).
+- Composition d'une page editoriale : sections en grille `3fr 9fr` (label / corps) separees par des
+  filets `.rule`, titres en `--font-size-xl`/`2xl`, textes secondaires en `--color-muted` bornes a
+  `--max-col-text`.
+- Les diagrammes sont du **SVG inline** dans la page (pas d'image binaire) : ils consomment les memes
+  `var(--color-*)`, restent nets a toute densite et portent `role="img"` + `aria-label` decrivant le
+  schema.
+- Les assets JS de la coquille technique vont dans `wwwroot/App/<Zone>/<nom>.js` (module ES importe
+  par `IJSRuntime`), ceux d'une feature dans `wwwroot/<Feature>/...`. Toujours desabonner les listeners
+  dans `DisposeAsync`.
+- Attribut ARIA pilote par un booleen : ecrire `aria-expanded="@(isOpen ? "true" : "false")"`. Un
+  `aria-expanded="@isOpen"` rend un attribut vide (semantique booleenne Blazor) : la valeur `"true"`
+  n'existe jamais, ce qui casse a la fois l'accessibilite et les selecteurs
+  `[aria-expanded="true"]`.
+- Etats de menu mobile : `.menu-toggle` >= 44x44px, backdrop cliquable, fermeture au clic sur un lien.

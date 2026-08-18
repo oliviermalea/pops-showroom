@@ -1,0 +1,196 @@
+@page "/customers"
+@using System.Diagnostics
+@using ShowRoom.Web.Features.Customer
+@inject ICustomerFacade CustomerFacade
+@inject NavigationManager Navigation
+
+<PageTitle>Clients — ShowRoom</PageTitle>
+
+<section class="list" aria-labelledby="list-title">
+    <div class="list__meta">
+        <p class="section-label">Module Customer</p>
+        <span class="module-tag">Liste</span>
+    </div>
+
+    <div class="list__body">
+        <div class="list__header">
+            <h1 class="list__title" id="list-title">Clients</h1>
+            <a class="list__action" href="/customers/new">Créer un client</a>
+        </div>
+
+        <form class="filter" @onsubmit="ApplySearch" @onsubmit:preventDefault>
+            <label class="filter__label" for="customer-search">Rechercher par nom</label>
+
+            <div class="filter__row">
+                <input id="customer-search"
+                       class="filter__input"
+                       type="search"
+                       autocomplete="off"
+                       placeholder="Nom ou prénom"
+                       disabled="@isLoading"
+                       value="@searchInput"
+                       @oninput="OnSearchInput" />
+
+                <button type="submit" class="filter__submit" disabled="@isLoading">Filtrer</button>
+
+                @if (!string.IsNullOrWhiteSpace(Search))
+                {
+                    <a class="filter__reset" href="/customers">Effacer</a>
+                }
+            </div>
+        </form>
+
+        <div class="list__content">
+            @if (isLoading)
+            {
+                <CustomerTableSkeleton Rows="skeletonRows" />
+            }
+            else if (result is null || result.Outcome == CustomerListOutcome.Unavailable)
+            {
+                <div class="list__state list__state--error list__panel" role="alert">
+                    <p>Le service Customer est momentanément indisponible.</p>
+                    <button type="button" class="list__retry" @onclick="LoadAsync">Réessayer</button>
+                </div>
+            }
+            else if (result.Page!.IsEmpty)
+            {
+                <p class="list__state list__state--muted list__panel">
+                    @(string.IsNullOrWhiteSpace(Search)
+                        ? "Aucun client enregistré pour le moment."
+                        : $"Aucun client ne correspond à « {Search} ».")
+                </p>
+            }
+            else
+            {
+                <div class="list__panel">
+                    <CustomerTable Items="result.Page.Items" />
+                </div>
+            }
+
+            @* Toujours rendue : masquée (sans perdre sa place) tant qu'il n'y a pas de page à
+               parcourir, pour que l'arrivée des données ne décale jamais le tableau. *@
+            <nav class="pager @(HasPage ? null : "pager--hidden")" aria-label="Pagination">
+                <p class="pager__count" aria-live="polite">@CountLabel</p>
+
+                <div class="pager__actions">
+                    <button type="button"
+                            class="pager__button"
+                            disabled="@(!CanGoPrevious)"
+                            @onclick="() => GoToPage(CurrentPage - 1)">
+                        Précédent
+                    </button>
+
+                    <button type="button"
+                            class="pager__button"
+                            disabled="@(!CanGoNext)"
+                            @onclick="() => GoToPage(CurrentPage + 1)">
+                        Suivant
+                    </button>
+                </div>
+            </nav>
+        </div>
+    </div>
+</section>
+
+@code {
+    private const int PageSize = 20;
+
+    /// <summary>
+    /// Le squelette reste affiché au moins ce temps : en dessous, une réponse rapide ne produirait
+    /// qu'un clignotement, plus perturbant que pas d'indicateur du tout.
+    /// </summary>
+    private const int MinimumSkeletonVisibleMs = 350;
+
+    private const int DefaultSkeletonRows = 5;
+
+    private CustomerListResult? result;
+    private string searchInput = string.Empty;
+    private bool isLoading;
+    private int skeletonRows = DefaultSkeletonRows;
+
+    /// <summary>
+    /// Page and search live in the query string: the screen stays linkable and back-navigable.
+    /// (The property cannot be named <c>Page</c> — that is this component's own type name.)
+    /// </summary>
+    [SupplyParameterFromQuery(Name = "page")]
+    public int? PageNumber { get; set; }
+
+    [SupplyParameterFromQuery]
+    public string? Search { get; set; }
+
+    private CustomerList.CustomerListView? LoadedPage
+        => result?.Outcome == CustomerListOutcome.Loaded ? result.Page : null;
+
+    private bool HasPage => !isLoading && LoadedPage is { IsEmpty: false };
+
+    private int CurrentPage => LoadedPage?.Page ?? PageNumber ?? 1;
+
+    private bool CanGoPrevious => HasPage && LoadedPage!.HasPrevious;
+
+    private bool CanGoNext => HasPage && LoadedPage!.HasNext;
+
+    private string CountLabel => LoadedPage is { IsEmpty: false } page
+        ? $"{page.FirstItemIndex}–{page.LastItemIndex} sur {page.TotalItems} · page {page.Page} / {page.TotalPages}"
+        : string.Empty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        searchInput = Search ?? string.Empty;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var elapsed = Stopwatch.StartNew();
+
+        isLoading = true;
+        result = null;
+
+        try
+        {
+            var loaded = await CustomerFacade.GetCustomersAsync(PageNumber ?? 1, PageSize, Search);
+
+            var remaining = TimeSpan.FromMilliseconds(MinimumSkeletonVisibleMs) - elapsed.Elapsed;
+
+            if (remaining > TimeSpan.Zero)
+            {
+                await Task.Delay(remaining);
+            }
+
+            result = loaded;
+
+            if (loaded.Page is { IsEmpty: false } page)
+            {
+                // Le prochain chargement reprend la hauteur de la page qu'il remplace.
+                skeletonRows = page.Items.Count;
+            }
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void OnSearchInput(ChangeEventArgs args) => searchInput = args.Value?.ToString() ?? string.Empty;
+
+    private void ApplySearch() => Navigate(page: 1, search: searchInput);
+
+    private void GoToPage(int page) => Navigate(page, Search);
+
+    private void Navigate(int page, string? search)
+    {
+        var query = new List<string>();
+
+        if (page > 1)
+        {
+            query.Add($"page={page}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            query.Add($"search={Uri.EscapeDataString(search.Trim())}");
+        }
+
+        Navigation.NavigateTo(query.Count == 0 ? "/customers" : $"/customers?{string.Join('&', query)}");
+    }
+}

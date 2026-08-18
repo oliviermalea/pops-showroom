@@ -1,0 +1,43 @@
+@* Success state: the customer fiche, in the swiss definition-list style. *@
+
+<article class="fiche">
+    <header class="fiche__header">
+        <h2 class="fiche__name">@Customer.DisplayName</h2>
+        <span class="fiche__status @(Customer.IsActive ? "fiche__status--active" : "fiche__status--inactive")">
+            <span class="status-dot"></span>@Customer.Status
+        </span>
+    </header>
+
+    <dl class="fiche__specs">
+        <div class="fiche__spec">
+            <dt>Public id</dt>
+            <dd><code>@Customer.PublicId</code></dd>
+        </div>
+        <div class="fiche__spec">
+            <dt>Prénom</dt>
+            <dd>@Customer.FirstName</dd>
+        </div>
+        <div class="fiche__spec">
+            <dt>Nom</dt>
+            <dd>@Customer.LastName</dd>
+        </div>
+        <div class="fiche__spec">
+            <dt>Email</dt>
+            <dd><a href="mailto:@Customer.Email">@Customer.Email</a></dd>
+        </div>
+        <div class="fiche__spec">
+            <dt>Téléphone</dt>
+            <dd>@Customer.Phone</dd>
+        </div>
+        <div class="fiche__spec">
+            <dt>Inscrit le</dt>
+            <dd>@Customer.RegisteredOn</dd>
+        </div>
+    </dl>
+</article>
+
+@code {
+    [Parameter]
+    [EditorRequired]
+    public CustomerDetailView Customer { get; set; } = default!;
+}

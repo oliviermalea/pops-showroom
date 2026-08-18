@@ -1,0 +1,37 @@
+@* État de chargement : la même table que CustomerTable, remplie de barres animées.
+   Reproduire la structure réelle (mêmes colonnes, même rythme de lignes) évite que la page
+   saute au moment où les données arrivent. *@
+
+<div class="table-scroll"
+     role="status"
+     aria-busy="true"
+     aria-live="polite"
+     aria-label="Chargement des clients">
+    <table class="table table--skeleton">
+        <thead>
+            <tr>
+                <th scope="col">Nom</th>
+                <th scope="col">Email</th>
+                <th scope="col">Statut</th>
+                <th scope="col" class="table__col--date">Inscrit le</th>
+            </tr>
+        </thead>
+        <tbody>
+            @for (var row = 0; row < Rows; row++)
+            {
+                <tr aria-hidden="true">
+                    <td><span class="skeleton skeleton--name"></span></td>
+                    <td><span class="skeleton skeleton--email"></span></td>
+                    <td><span class="skeleton skeleton--status"></span></td>
+                    <td class="table__col--date"><span class="skeleton skeleton--date"></span></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    /// <summary>Number of placeholder rows — mirrors the page being replaced, so the block keeps its height.</summary>
+    [Parameter]
+    public int Rows { get; set; } = 5;
+}

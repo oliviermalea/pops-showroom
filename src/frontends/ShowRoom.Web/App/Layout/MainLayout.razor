@@ -1,0 +1,104 @@
+@inherits LayoutComponentBase
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div class="layout">
+    <button type="button"
+            class="scroll-top @(showScrollTop ? "is-visible" : null)"
+            aria-label="Retour en haut"
+            @onclick="ScrollToTop">
+        ↑
+    </button>
+
+    <header class="site-header">
+        <div class="site-header__inner">
+            <span class="logotype">ShowRoom</span>
+
+            <button type="button"
+                    class="menu-toggle"
+                    aria-label="@(isMenuOpen ? "Fermer le menu" : "Ouvrir le menu")"
+                    aria-expanded="@(isMenuOpen ? "true" : "false")"
+                    @onclick="ToggleMenu">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+
+            <nav class="site-nav @(isMenuOpen ? "is-open" : null)" aria-label="Navigation principale">
+                <a href="/#principes" class="nav-link" @onclick="CloseMenu">Principes</a>
+                <a href="/#modules" class="nav-link" @onclick="CloseMenu">Modules</a>
+                <a href="/customers" class="nav-link" @onclick="CloseMenu">Clients</a>
+            </nav>
+        </div>
+    </header>
+
+    <div class="menu-backdrop @(isMenuOpen ? "is-open" : null)" aria-hidden="true" @onclick="CloseMenu"></div>
+
+    <div class="container layout__content">
+        @Body
+    </div>
+
+    <footer class="site-footer">
+        <div class="site-footer__inner">
+            <span class="site-footer__copy">© @DateTime.UtcNow.Year ShowRoom</span>
+            <span class="site-footer__branch">modulith → distribué</span>
+        </div>
+    </footer>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    Une erreur inattendue s'est produite.
+    <a href="." class="reload">Recharger</a>
+    <span class="dismiss">✕</span>
+</div>
+
+@code {
+    private bool isMenuOpen;
+    private bool showScrollTop;
+    private IJSObjectReference? scrollTopModule;
+    private DotNetObjectReference<MainLayout>? dotNetRef;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            scrollTopModule = await JS.InvokeAsync<IJSObjectReference>("import", "/App/Layout/scrollTop.js");
+            dotNetRef = DotNetObjectReference.Create(this);
+            await scrollTopModule.InvokeVoidAsync("register", dotNetRef);
+        }
+    }
+
+    private void ToggleMenu() => isMenuOpen = !isMenuOpen;
+
+    private void CloseMenu() => isMenuOpen = false;
+
+    [JSInvokable]
+    public void SetScrollTopVisibility(bool visible)
+    {
+        if (showScrollTop != visible)
+        {
+            showScrollTop = visible;
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task ScrollToTop()
+        => await JS.InvokeVoidAsync("window.scrollTo", new { top = 0, behavior = "smooth" });
+
+    public async ValueTask DisposeAsync()
+    {
+        if (scrollTopModule is not null)
+        {
+            try
+            {
+                await scrollTopModule.InvokeVoidAsync("unregister");
+                await scrollTopModule.DisposeAsync();
+            }
+            catch
+            {
+            }
+        }
+
+        dotNetRef?.Dispose();
+    }
+}

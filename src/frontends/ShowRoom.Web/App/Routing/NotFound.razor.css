@@ -1,0 +1,32 @@
+.status-page {
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+}
+
+.status-page__title {
+    font-size: var(--font-size-2xl);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: var(--line-height-tight);
+    color: var(--color-ink);
+}
+
+.status-page__text {
+    font-size: var(--font-size-base);
+    color: var(--color-muted);
+    line-height: var(--line-height-loose);
+    max-width: var(--max-col-text);
+}
+
+.status-page__link {
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-features);
+    border-bottom: 1px solid var(--color-features);
+    padding-bottom: 2px;
+}

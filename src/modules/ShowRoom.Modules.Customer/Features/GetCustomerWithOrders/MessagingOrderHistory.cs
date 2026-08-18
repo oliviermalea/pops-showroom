@@ -15,15 +15,18 @@ namespace ShowRoom.Modules.Customer.Features.GetCustomerWithOrders;
 /// can correlate and enrich its logs and spans.
 ///
 /// <para>The <b>first</b> request after startup often times out: Wolverine establishes the RabbitMQ
-/// connection and provisions the queues (including the reply queue) lazily on first use, which can exceed
-/// the 5s timeout. Because this is an idempotent read, a bounded retry on <see cref="TimeoutException"/>
-/// absorbs that cold start — the next attempt hits an already-warm path and returns in milliseconds —
-/// instead of surfacing as a spurious "Order module unavailable" degradation.</para>
+/// connection and provisions the queues (including the reply queue) lazily on first use. Because this is
+/// an idempotent read, a bounded retry on <see cref="TimeoutException"/> absorbs that cold start — the
+/// next attempt hits an already-warm path and returns in milliseconds — instead of surfacing as a
+/// spurious "Order module unavailable" degradation.</para>
+///
+/// <para>Deadlines are set explicitly per attempt (see <see cref="OrderHistoryRetryPolicy"/>) rather
+/// than inherited from Wolverine's 5s default: this read serves an HTTP request, so its worst case is
+/// user-visible latency.</para>
 /// </summary>
 internal sealed class MessagingOrderHistory(IMessageBus bus, ILogger<MessagingOrderHistory> logger) : IOrderHistory
 {
     private const string FeatureName = "GetCustomerWithOrders";
-    private const int MaxAttempts = 3;
 
     public async Task<OrdersForCustomerResponse> ForCustomerAsync(
         string customerPublicId,
@@ -51,18 +54,22 @@ internal sealed class MessagingOrderHistory(IMessageBus bus, ILogger<MessagingOr
             {
                 try
                 {
-                    return await bus.InvokeAsync<OrdersForCustomerResponse>(request, options, cancellationToken);
+                    return await bus.InvokeAsync<OrdersForCustomerResponse>(
+                        request,
+                        options,
+                        cancellationToken,
+                        OrderHistoryRetryPolicy.TimeoutFor(attempt));
                 }
-                catch (TimeoutException) when (attempt < MaxAttempts)
+                catch (TimeoutException) when (attempt < OrderHistoryRetryPolicy.MaxAttempts)
                 {
                     // Cold start: broker connection / reply queue still warming up. Retry the idempotent
                     // query with a short backoff; the warm attempt returns quickly.
                     logger.LogWarning(
                         "AMQP request/reply timed out (attempt {Attempt}/{MaxAttempts}); retrying after broker warm-up",
                         attempt,
-                        MaxAttempts);
+                        OrderHistoryRetryPolicy.MaxAttempts);
                     MessagingMetrics.RecordRetry(CustomerModule.ModuleName, FeatureName, nameof(GetOrdersForCustomer));
-                    await Task.Delay(TimeSpan.FromMilliseconds(200 * attempt), cancellationToken);
+                    await Task.Delay(OrderHistoryRetryPolicy.BackoffAfter(attempt), cancellationToken);
                 }
             }
         }

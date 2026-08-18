@@ -33,7 +33,7 @@ builder.AddProject<Projects.ShowRoom_Business_Api>("showroom-business-api")
 // Customer service — PRODUCES the Order query over the bus (GetCustomerWithOrders) and PUBLISHES the
 // CustomerRegistered integration event through Wolverine's transactional outbox (message store in the
 // "wolverine" schema of the shared showroom database — single DbContext, atomic with the customer insert).
-builder.AddProject<Projects.ShowRoom_Customer_Api>("showroom-customer-api")
+var customerApi = builder.AddProject<Projects.ShowRoom_Customer_Api>("showroom-customer-api")
     .WithHttpEndpoint(port: 5205, name: "http")
     .WithHttpsEndpoint(port: 7107, name: "https")
     .WithReference(showroomDb)
@@ -41,5 +41,14 @@ builder.AddProject<Projects.ShowRoom_Customer_Api>("showroom-customer-api")
     .WithReference(messaging)
     .WaitFor(messaging)
     .WithScalarUrl();
+
+// Blazor front (Swiss style). Consumes the Customer service over HTTP (typed Refit client) — the front
+// is the "outside world" calling into the system, so HTTP is the right transport here.
+builder.AddProject<Projects.ShowRoom_Web>("showroom-web")
+    .WithHttpEndpoint(port: 5206, name: "http")
+    .WithHttpsEndpoint(port: 7108, name: "https")
+    .WithReference(customerApi)
+    .WaitFor(customerApi)
+    .WithExternalHttpEndpoints();
 
 builder.Build().Run();

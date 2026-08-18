@@ -16,6 +16,7 @@
 	<ItemGroup>
 		<ProjectReference Include="..\..\backends\ShowRoom.Business.Api\ShowRoom.Business.Api.csproj" />
 		<ProjectReference Include="..\..\backends\ShowRoom.Customer.Api\ShowRoom.Customer.Api.csproj" />
+		<ProjectReference Include="..\..\frontends\ShowRoom.Web\ShowRoom.Web.csproj" />
 	</ItemGroup>
 
 </Project>

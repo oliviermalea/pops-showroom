@@ -8,6 +8,9 @@
     <Project Path="src/aspire/ShowRoom.AppHost/ShowRoom.AppHost.csproj" />
     <Project Path="src/aspire/ShowRoom.ServiceDefaults/ShowRoom.ServiceDefaults.csproj" />
   </Folder>
+  <Folder Name="/src/Frontends/">
+    <Project Path="src/frontends/ShowRoom.Web/ShowRoom.Web.csproj" />
+  </Folder>
   <Folder Name="/src/BuildingBlocks/">
     <Project Path="src/buildingblocks/ShowRoom.BuildingBlocks/ShowRoom.BuildingBlocks.csproj" Id="7c5bdd51-2dc5-480a-80e6-6cdb3e6b6026" />
   </Folder>
@@ -37,5 +40,6 @@
     <Project Path="tests/ShowRoom.Modules.Product.Tests/ShowRoom.Modules.Product.Tests.csproj" />
     <Project Path="tests/ShowRoom.Modules.Product.IntegrationTests/ShowRoom.Modules.Product.IntegrationTests.csproj" />
     <Project Path="tests/ShowRoom.Architecture.Tests/ShowRoom.Architecture.Tests.csproj" />
+    <Project Path="tests/ShowRoom.Web.Tests/ShowRoom.Web.Tests.csproj" />
   </Folder>
 </Solution>

@@ -47,6 +47,8 @@
          targets Microsoft.OpenApi 2.x; 3.x made IOpenApiMediaType.Example read-only and breaks codegen. -->
     <PackageVersion Include="Microsoft.OpenApi" Version="2.7.5" />
     <PackageVersion Include="Npgsql.OpenTelemetry" Version="10.0.3" />
+    <PackageVersion Include="Refit" Version="11.2.0" />
+    <PackageVersion Include="Refit.HttpClientFactory" Version="11.2.0" />
     <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.17.0" />
     <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.17.0" />

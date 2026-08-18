@@ -1,0 +1,89 @@
+@page "/customers/{PublicId}"
+@using ShowRoom.Web.Features.Customer
+@inject ICustomerFacade CustomerFacade
+
+<PageTitle>@PageTitleText</PageTitle>
+
+<section class="customer" aria-labelledby="customer-title">
+    <div class="customer__meta">
+        <p class="section-label">Module Customer</p>
+        <span class="module-tag">Consultation</span>
+    </div>
+
+    <div class="customer__body">
+        <div class="customer__header">
+            <h1 class="customer__title" id="customer-title">Détail client</h1>
+
+            <div class="customer__links">
+                @if (result?.Outcome == CustomerLookupOutcome.Found)
+                {
+                    <a class="customer__action" href="@($"/customers/{PublicId}/orders")">Voir les commandes</a>
+                }
+                <a class="customer__back" href="/customers">Retour à la liste</a>
+            </div>
+        </div>
+
+        @if (isLoading)
+        {
+            <p class="customer__state" role="status" aria-live="polite">Chargement du client…</p>
+        }
+        else if (result is not null)
+        {
+            switch (result.Outcome)
+            {
+                case CustomerLookupOutcome.Found when result.Customer is { } customer:
+                    <CustomerDetailCard Customer="customer" />
+                    break;
+
+                case CustomerLookupOutcome.InvalidPublicId:
+                    <p class="customer__state customer__state--error" role="alert">
+                        Identifiant invalide : un <code>PublicId</code> ShowRoom s'écrit
+                        <code>cus_</code> suivi de 32 caractères hexadécimaux.
+                    </p>
+                    break;
+
+                case CustomerLookupOutcome.NotFound:
+                    <p class="customer__state customer__state--error" role="alert">
+                        Aucun client ne correspond à <code>@PublicId</code>.
+                    </p>
+                    break;
+
+                default:
+                    <div class="customer__state customer__state--error" role="alert">
+                        <p>Le service Customer est momentanément indisponible.</p>
+                        <button type="button" class="customer__retry" @onclick="LoadAsync">Réessayer</button>
+                    </div>
+                    break;
+            }
+        }
+    </div>
+</section>
+
+@code {
+    [Parameter]
+    public string? PublicId { get; set; }
+
+    private CustomerLookupResult? result;
+    private bool isLoading;
+
+    private string PageTitleText => result?.Customer is { } customer
+        ? $"{customer.DisplayName} — ShowRoom"
+        : "Détail client — ShowRoom";
+
+    protected override Task OnParametersSetAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        result = null;
+
+        try
+        {
+            result = await CustomerFacade.GetCustomerAsync(PublicId);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

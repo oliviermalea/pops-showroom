@@ -1,0 +1,86 @@
+/* Squelette de chargement : mêmes métriques que CustomerTable (voir CustomerTable.razor.css),
+   pour que la substitution ne déplace rien. */
+
+.table-scroll {
+    width: 100%;
+    overflow-x: auto;
+    animation: customer-skeleton-fade-in 0.28s ease-out;
+}
+
+@keyframes customer-skeleton-fade-in {
+    0%   { opacity: 0; transform: translateY(4px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-sm);
+}
+
+.table th {
+    text-align: left;
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-application);
+    border-bottom: 2px solid var(--color-infrastructure);
+    padding: var(--space-1) var(--space-2) var(--space-1) 0;
+    white-space: nowrap;
+}
+
+.table td {
+    border-bottom: 1px solid var(--color-line);
+    padding: var(--space-2) var(--space-2) var(--space-2) 0;
+    vertical-align: baseline;
+}
+
+.table--skeleton {
+    pointer-events: none;
+    user-select: none;
+}
+
+.skeleton {
+    display: block;
+    height: 12px;
+    border-radius: 999px;
+    background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--color-line) 70%, white) 0%,
+        color-mix(in srgb, var(--color-surface) 70%, white) 30%,
+        color-mix(in srgb, var(--color-line) 70%, white) 100%
+    );
+    background-size: 200% 100%;
+    animation: customer-skeleton-shimmer 1.2s ease-in-out infinite;
+}
+
+/* Largeurs calées sur la donnée réelle : un nom est court, un email long. */
+.skeleton--name   { width: min(70%, 180px); height: 14px; }
+.skeleton--email  { width: min(90%, 260px); }
+.skeleton--status { width: 72px; }
+.skeleton--date   { width: 96px; }
+
+@keyframes customer-skeleton-shimmer {
+    0%   { background-position: 200% 0; opacity: 0.7; }
+    50%  { opacity: 1; }
+    100% { background-position: -200% 0; opacity: 0.7; }
+}
+
+/* Le scintillement est décoratif : il ne doit pas s'imposer à qui demande moins d'animation. */
+@media (prefers-reduced-motion: reduce) {
+    .skeleton {
+        animation: none;
+        background-position: 0 0;
+    }
+
+    .table-scroll {
+        animation: none;
+    }
+}
+
+@media (max-width: 768px) {
+    .table__col--date {
+        display: none;
+    }
+}

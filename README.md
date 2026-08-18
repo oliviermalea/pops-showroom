@@ -21,6 +21,7 @@ détail d'un produit** — chaque capacité vivant dans un bounded context disti
 - [Structure de la solution](#structure-de-la-solution)
 - [Démarrage](#démarrage)
 - [APIs disponibles](#apis-disponibles)
+- [Front Blazor (ShowRoom.Web)](#front-blazor-showroomweb)
 - [Messaging & observabilité](#messaging--observabilité)
 - [Tests](#tests)
 
@@ -46,6 +47,7 @@ Deux styles de messagerie coexistent :
 ```mermaid
 flowchart LR
     client([Client HTTP])
+    web["ShowRoom.Web<br/>(front Blazor — accueil)"]
 
     subgraph customer[ShowRoom.Customer.Api]
         cust[Module Customer]
@@ -60,6 +62,9 @@ flowchart LR
 
     client -->|HTTP /customers| cust
     client -->|HTTP /orders, /products| ord
+
+    web -->|HTTP /customers/{publicId}| cust
+    web -.->|HTTP (à venir)| ord
 
     cust -->|"InvokeAsync(GetOrdersForCustomer)"| rabbit
     rabbit -->|GetOrdersForCustomer| ord
@@ -85,6 +90,10 @@ flowchart LR
   trace distribuée complète et fiable, sans couplage HTTP entre services.
 - Dégradation gracieuse : si le service Order / le broker est indisponible, le client est tout de même
   renvoyé avec `ordersAvailable = false` et une liste de commandes vide.
+- **`ShowRoom.Web`** — front Blazor (Server interactive) orchestré par Aspire. Il consomme le service
+  Customer en **HTTP** (client typé Refit) : le front est le monde extérieur qui appelle le système, le
+  HTTP y est donc légitime — la règle « M2M = AMQP » ne concerne que les échanges entre services. Voir
+  [Front Blazor](#front-blazor-showroomweb).
 
 ---
 
@@ -93,6 +102,8 @@ flowchart LR
 | Domaine | Choix |
 |---|---|
 | Runtime | .NET 10, C# / Minimal APIs (aucun MVC) |
+| Front | Blazor Web App (render mode Server interactif), design system « swiss » maison (CSS variables, aucun framework CSS) |
+| Client d'API front | **Refit** (interfaces typées) sur `IHttpClientFactory` — approche sélective : écrit à la main tant que la surface est étroite, générable par **Refitter** quand elle s'élargit |
 | Orchestration | .NET Aspire (AppHost + ServiceDefaults) |
 | Persistance | EF Core 10 + PostgreSQL (une base `showroom`, un schéma par module) |
 | Messaging M2M | RabbitMQ via **Wolverine** — request/reply (`IMessageBus.InvokeAsync`) + **outbox transactionnel** (producteur, DbContext unique) + **inbox durable & retry/dead-letter** (consommateur) ; message stores PostgreSQL par service (`wolverine`, `wolverine_business`) |
@@ -140,6 +151,8 @@ Pops-ShowRoom.slnx
 │  ├─ backends/
 │  │  ├─ ShowRoom.Customer.Api         # service Customer (producteur messaging)
 │  │  └─ ShowRoom.Business.Api         # service Order + Product (consommateur messaging)
+│  ├─ frontends/
+│  │  └─ ShowRoom.Web                  # front Blazor (accueil + détail client, clients Refit)
 │  ├─ modules/
 │  │  ├─ ShowRoom.Modules.Customer     # bounded context Customer
 │  │  ├─ ShowRoom.Modules.Order        # bounded context Order
@@ -150,6 +163,7 @@ Pops-ShowRoom.slnx
 └─ tests/
    ├─ ShowRoom.Testing                        # harnais d'intégration (Testcontainers, factory générique)
    ├─ ShowRoom.Architecture.Tests             # tests de frontières (ArchUnitNET)
+   ├─ ShowRoom.Web.Tests                      # mapping + orchestration de la façade du front
    └─ ShowRoom.Modules.<Module>.Tests / .IntegrationTests
 ```
 
@@ -163,8 +177,16 @@ Pops-ShowRoom.slnx
 dotnet run --project src/aspire/ShowRoom.AppHost
 ```
 
-Aspire démarre PostgreSQL, RabbitMQ et les deux APIs, puis ouvre le **dashboard** (traces, métriques,
-logs, découverte des endpoints). Chaque service expose son UI **Scalar** (`/scalar`) en développement.
+Aspire démarre PostgreSQL, RabbitMQ, les deux APIs et le front Blazor (`showroom-web`,
+`http://localhost:5206`), puis ouvre le **dashboard** (traces, métriques, logs, découverte des
+endpoints). Chaque service expose son UI **Scalar** (`/scalar`) en développement.
+
+Le front seul (page d'accueil et écrans sans appel d'API ; les écrans consommant le service Customer
+attendent `http://localhost:5205`, port fixé par l'AppHost) :
+
+```bash
+dotnet run --project src/frontends/ShowRoom.Web
+```
 
 > Astuce : pour observer la trace distribuée, appeler
 > `GET /api/v1/customers/{publicId}/with-orders` sur le service Customer — la trace unique traverse
@@ -212,15 +234,156 @@ identifiées par leur **`PublicId`** (jamais l'identifiant technique).
 
 ---
 
+## Front Blazor (ShowRoom.Web)
+
+`src/frontends/ShowRoom.Web` — **Blazor Web App** (.NET 10) en render mode **InteractiveServer**,
+orchestré par Aspire (`showroom-web`) et instrumenté comme les services (ServiceDefaults + Serilog →
+OTLP, `/health` et `/alive`).
+
+**Écrans disponibles :**
+
+| Route | Écran | API consommée |
+|---|---|---|
+| `/` | Accueil — topologie (SVG), manifeste, piliers, modules | — |
+| `/customers?page=&search=` | Liste paginée + filtre par nom | `GET /api/v1/customers` |
+| `/customers/{publicId}` | Détail d'un client (fiche) | `GET /api/v1/customers/{publicId}` |
+| `/customers/{publicId}/orders` | Historique des commandes (agrégat cross-service) | `GET /api/v1/customers/{publicId}/with-orders` |
+| `/customers/new` | Création d'un client (formulaire) | `POST /api/v1/customers` |
+
+Les trois écrans du module couvrent la convention des **4 écrans de référence**
+([`frontend.md`](.claude/rules/frontend.md) §2.3) : consultation, création, groupement, navigation.
+L'état de la liste (page, recherche) vit dans la **query string** : l'écran reste partageable par URL
+et le bouton Retour du navigateur fonctionne.
+
+Structure (conforme à [`.claude/rules/frontend.md`](.claude/rules/frontend.md) §11) :
+
+```text
+src/frontends/ShowRoom.Web/
+├─ App/                            # coquille technique
+│  ├─ App.razor                    # document HTML racine
+│  ├─ Layout/                      # MainLayout (header/nav/footer, scroll-top), ReconnectModal
+│  └─ Routing/                     # Routes, Error, NotFound
+├─ Features/
+│  ├─ Home/                        # page "/"
+│  └─ Customer/                    # module Customer
+│     ├─ CustomerFacade.cs         # LA porte d'entrée du module pour l'UI (+ ICustomerFacade)
+│     ├─ CustomerFormat.cs         # règles de présentation partagées par les écrans
+│     ├─ CustomerListResult.cs     # issue : Loaded / Unavailable
+│     ├─ CustomerLookupResult.cs   # issue : Found / InvalidPublicId / NotFound / Unavailable
+│     ├─ CustomerCreationResult.cs # issue : Created / EmailAlreadyUsed / Rejected / Unavailable
+│     ├─ CustomerList/             # écran : Page.razor, CustomerTable, CustomerListView,
+│     │                            #         CustomerListMapper
+│     ├─ CustomerDetail/           # écran : Page.razor, CustomerDetailCard,
+│     │                            #         CustomerDetailView (view model), CustomerDetailMapper
+│     ├─ CustomerOrders/           # écran : Page.razor, CustomerOrderCard, CustomerOrdersView,
+│     │                            #         CustomerOrdersMapper
+│     └─ CreateCustomer/           # écran : Page.razor, CreateCustomerForm (POCO),
+│                                  #         CreateCustomerFormValidator, CreateCustomerMapper
+├─ Infrastructure/
+│  ├─ Api/
+│  │  ├─ BackendApiOptions.cs      # adresses des services (section "BackendApi")
+│  │  ├─ RefitRegistration.cs      # AddRefitClient + RefitSettings (System.Text.Json)
+│  │  └─ Refit/
+│  │     ├─ Models/PagedResponse.cs # enveloppe de pagination partagée (tous modules)
+│  │     └─ Customer/              # ICustomerApi + Models/ (List + Get + Create)
+│  ├─ Validation/                  # FluentValidationValidator (branche FluentValidation sur EditForm)
+│  └─ PublicIds/PublicIdFormat.cs  # contrôle de format au boundary
+├─ customer.refitter               # config Refitter (génération optionnelle — voir plus bas)
+└─ wwwroot/
+   ├─ app.css                      # design system swiss (tokens CSS)
+   └─ App/Layout/scrollTop.js      # asset colocalisé du layout
+```
+
+**Consommation d'API — Refit, en approche sélective.** Le front n'appelle jamais un `HttpClient` nu ni
+un client généré depuis un composant : il orchestre une **façade par module** (`ICustomerFacade`), qui
+appelle une **interface Refit** enregistrée sur `IHttpClientFactory` (donc bénéficiant du service
+discovery Aspire et du handler de résilience de ServiceDefaults). Les méthodes renvoient
+`ApiResponse<T>` : un `404`/`400`/`409` est une **donnée métier** traduite en issue explicite
+(`CustomerLookupOutcome`, `CustomerCreationOutcome`), pas une exception. Chaque état (chargement / vide
+/ invalide / introuvable / indisponible / succès) a sa branche dans la page.
+
+**Chargement.** La liste ne dit pas « Chargement… » : elle rend un **squelette** reproduisant le
+tableau réel (mêmes colonnes, nombre de lignes repris de la page remplacée), maintenu au moins 350 ms
+pour qu'une réponse rapide ne produise pas un clignotement. La pagination reste rendue mais masquée en
+`visibility: hidden` pendant ce temps : l'arrivée des données ne décale rien. Scintillement et fondu
+sont neutralisés sous `prefers-reduced-motion`.
+
+**Dégradation cross-service, visible à l'écran.** `/customers/{publicId}/orders` consomme l'endpoint
+agrégeant `with-orders` : le service Customer y récupère l'historique auprès du service Order **via
+AMQP**. Quand ce saut échoue, le backend répond `200` avec `ordersAvailable = false` (dégradation
+gracieuse) — un **succès partiel** que l'écran affiche comme tel : identité du client conservée,
+bannière `role="status"` expliquant que seules les commandes manquent, bouton Réessayer. Ce n'est ni
+une erreur, ni un « client sans commande ».
+
+> ⚠️ **Budget de temps du client HTTP.** Ce chemin de dégradation ne répond qu'une fois le budget de
+> retries du backend épuisé (**6,3 s** mesurées — voir `OrderHistoryRetryPolicy` dans
+> [Messaging](#messaging--observabilité)). Le handler de résilience par défaut de ServiceDefaults coupe
+> à **10 s par tentative**, ce qui était plus court que le budget backend d'origine (~16 s) : il tuait
+> l'appel avant la réponse dégradée et transformait un succès partiel explicable en « service
+> indisponible ». Le client `ICustomerApi` remplace donc ce pipeline (`RemoveAllResilienceHandlers` +
+> `AddStandardResilienceHandler`, **12 s par tentative**, 1 retry) — voir `RefitRegistration.cs`. Les
+> deux budgets sont **couplés** : toute API agrégeant d'autres services impose la même règle — le
+> budget du client doit dépasser le pire chemin de dégradation qu'il veut observer, et être resserré
+> quand celui-ci l'est.
+
+**Formulaires.** Validation **FluentValidation** uniquement (jamais DataAnnotations) : un modèle POCO,
+un `AbstractValidator<T>` séparé aux messages français, branchés sur l'`EditForm` par le composant
+`Infrastructure/Validation/FluentValidationValidator`. Il valide tout le modèle à la soumission mais ne
+remplace que les messages du champ modifié lors d'une saisie — un champ non encore rempli ne s'affiche
+pas en erreur prématurément. Les règles client reproduisent les contraintes du backend, qui reste
+l'autorité : un email en doublon n'est détectable que côté serveur (409 → message dédié, l'utilisateur
+reste sur le formulaire ; succès → redirection vers la fiche créée).
+
+**Génération avec Refitter (optionnelle).** Tant que la surface consommée reste étroite, l'interface est
+écrite à la main (`ICustomerApi` : une méthode). Quand elle s'élargit, `customer.refitter` permet de la
+régénérer depuis l'OpenAPI du service — sans rien changer aux appelants, la façade étant la seule
+frontière :
+
+```bash
+dotnet tool install --global refitter
+```
+
+Puis, **le service Customer étant démarré** (l'`openApiPath` pointe sur son document `/openapi/v1.json`) :
+
+```bash
+refitter --settings-file src/frontends/ShowRoom.Web/customer.refitter
+```
+
+Le fichier de configuration est fourni comme point de départ mais **n'a pas encore été exécuté** :
+vérifier le nom d'interface généré (`multipleInterfaces: ByTag` le dérive du tag OpenAPI) avant de
+remplacer l'interface écrite à la main.
+
+**Design system « swiss »** : Helvetica Neue, grille d'espacement en multiples de 8 px, aplats et
+filets 1 px, libellés capitales espacées, aucun framework CSS. Les tokens (`--color-*`, `--space-*`,
+`--font-size-*`, `--transition-*`) sont définis une seule fois dans `wwwroot/app.css` ; chaque page
+n'écrit que son propre `*.razor.css` **scopé** et ne consomme que ces variables. Mobile-first :
+breakpoints `1024px` / `768px`, cibles tactiles ≥ 44 px, aucun débordement horizontal.
+
+---
+
 ## Messaging & observabilité
 
 - **Contrat** : `ShowRoom.Modules.Order.Contracts` — messages `GetOrdersForCustomer` /
   `OrdersForCustomerResponse`, records purs sans dépendance d'implémentation.
-- **Producteur** (Customer.Api) : `IMessageBus.InvokeAsync<OrdersForCustomerResponse>` derrière une
-  port anti-corruption (`IOrderHistory`), avec dégradation gracieuse (timeout Wolverine 5 s) et
-  **retry borné sur cold-start** (3 tentatives sur `TimeoutException` — le tout premier message
-  provisionne connexion + reply-queue au-delà des 5 s, les tentatives suivantes tombent sur un chemin
-  chaud ; la lecture étant idempotente, le retry est sûr).
+- **Producteur** (Customer.Api) : `IMessageBus.InvokeAsync<OrdersForCustomerResponse>` derrière un
+  port anti-corruption (`IOrderHistory`), avec dégradation gracieuse et **retry borné sur cold-start**
+  (le tout premier message provisionne connexion + reply-queue ; les tentatives suivantes tombent sur
+  un chemin chaud, et la lecture étant idempotente le retry est sûr).
+- **Budget de temps de ce chemin de lecture** — `OrderHistoryRetryPolicy` (slice
+  `Features/GetCustomerWithOrders/`). Cette lecture sert une requête HTTP : son pire cas est de la
+  latence vue par l'utilisateur, donc les délais sont **explicites par tentative** au lieu d'hériter du
+  timeout Wolverine de 5 s :
+
+  | | Délai | Rôle |
+  |---|---|---|
+  | Tentative 1 | 2 s | chemin chaud (répond en ms) — échoue vite |
+  | Backoff | 200 ms | |
+  | Tentative 2 | 4 s | absorbe le provisioning du cold-start |
+  | **Pire cas** | **6,2 s** | avant la réponse dégradée (`ordersAvailable = false`) |
+
+  Mesures : cold-start **2,9 s** avec historique complet (la 2ᵉ tentative réussit), chemin chaud
+  **0,07 s**, dégradé **6,3 s** (contre ~16 s avec l'ancien budget de 3 × 5 s). Un test unitaire
+  (`OrderHistoryRetryPolicyTests`) verrouille ce plafond.
 - **Consommateur** (Business.Api) : handler Wolverine écoutant la file RabbitMQ, répondant depuis
   `OrdersContext`.
 - **Traces** : sources OpenTelemetry `Wolverine` + `RabbitMQ.Client.*` enregistrées ; Wolverine
@@ -367,3 +530,6 @@ dotnet test Pops-ShowRoom.slnx
   son service.
 - **Architecture** (`ShowRoom.Architecture.Tests`) : frontières entre couches et entre modules
   (un module ne dépend que du `*.Contracts` d'un autre, jamais de son implémentation).
+- **Front** (`ShowRoom.Web.Tests`) : mapping DTO → view model et orchestration de la façade — chaque
+  statut HTTP (200/400/404/5xx) et l'indisponibilité réseau sont couverts via un stub écrit à la main
+  de l'interface Refit (aucun framework de mock).

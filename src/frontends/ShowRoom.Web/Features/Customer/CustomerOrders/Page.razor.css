@@ -1,0 +1,217 @@
+/* ==========================================================================
+   Customer — historique des commandes (agrégat cross-service)
+   ========================================================================== */
+
+.orders {
+    display: grid;
+    grid-template-columns: 3fr 9fr;
+    gap: var(--space-8);
+    align-items: start;
+    padding: 0;
+}
+
+.orders__meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-1);
+    padding-top: 10px;
+}
+
+.module-tag {
+    display: inline-block;
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-features);
+    border: 1px solid var(--color-features);
+    padding: 4px var(--space-2);
+    border-radius: 2px;
+    width: fit-content;
+}
+
+.orders__body {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.orders__header {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.orders__title {
+    font-size: var(--font-size-2xl);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: var(--line-height-tight);
+    color: var(--color-ink);
+}
+
+.orders__action {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-features);
+    border-bottom: 1px solid var(--color-features);
+}
+
+.orders__action:hover {
+    color: var(--color-domain);
+    border-bottom-color: var(--color-domain);
+}
+
+.orders__customer {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    border-top: 1px solid var(--color-line);
+    padding-top: var(--space-2);
+}
+
+.orders__customer-name {
+    font-size: var(--font-size-lg);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--color-ink);
+}
+
+.orders__customer-email {
+    font-size: var(--font-size-sm);
+    color: var(--color-muted);
+    overflow-wrap: anywhere;
+}
+
+/* --- Dégradation gracieuse ----------------------------------------------- */
+
+.degraded {
+    border-left: 2px solid var(--color-infrastructure);
+    background-color: var(--color-surface);
+    padding: var(--space-2) var(--space-3);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-1);
+}
+
+.degraded__title {
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-domain);
+}
+
+.degraded__text {
+    font-size: var(--font-size-sm);
+    color: var(--color-muted);
+    line-height: var(--line-height-loose);
+    max-width: var(--max-col-text);
+}
+
+.degraded__retry {
+    margin-top: var(--space-1);
+    min-height: 44px;
+    padding: 0 var(--space-3);
+    font-family: inherit;
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-domain);
+    background: transparent;
+    border: 1px solid var(--color-infrastructure);
+    border-radius: 2px;
+    cursor: pointer;
+    transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.degraded__retry:hover {
+    color: var(--color-features);
+    border-color: var(--color-features);
+}
+
+/* --- États --------------------------------------------------------------- */
+
+.orders__state {
+    font-size: var(--font-size-sm);
+    color: var(--color-muted);
+    line-height: var(--line-height-loose);
+    max-width: var(--max-col-text);
+    border-top: 1px solid var(--color-line);
+    padding-top: var(--space-2);
+}
+
+.orders__state--error {
+    color: var(--color-domain);
+    border-top-color: var(--color-features);
+}
+
+.orders__state code {
+    font-family: var(--font-mono-stack);
+    font-size: 0.85em;
+    background-color: var(--color-surface);
+    padding: 2px 6px;
+    border-radius: 2px;
+    word-break: break-all;
+    max-width: 100%;
+}
+
+.orders__retry {
+    margin-top: var(--space-2);
+    min-height: 44px;
+    padding: 0 var(--space-3);
+    font-family: inherit;
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-features);
+    background: transparent;
+    border: 1px solid var(--color-features);
+    border-radius: 2px;
+    cursor: pointer;
+    transition: color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.orders__retry:hover {
+    color: var(--color-white);
+    background-color: var(--color-features);
+}
+
+/* --- Liste des commandes ------------------------------------------------- */
+
+.orders__list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+@media (max-width: 1024px) {
+    .orders {
+        grid-template-columns: 1fr;
+        gap: var(--space-3);
+    }
+
+    .orders__meta {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-2);
+        padding-top: 0;
+    }
+}

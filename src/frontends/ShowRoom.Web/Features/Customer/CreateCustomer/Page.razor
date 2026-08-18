@@ -1,0 +1,120 @@
+@page "/customers/new"
+@using ShowRoom.Web.Features.Customer
+@using ShowRoom.Web.Infrastructure.Validation
+@inject ICustomerFacade CustomerFacade
+@inject NavigationManager Navigation
+
+<PageTitle>Nouveau client — ShowRoom</PageTitle>
+
+<section class="create" aria-labelledby="create-title">
+    <div class="create__meta">
+        <p class="section-label">Module Customer</p>
+        <span class="module-tag">Création</span>
+    </div>
+
+    <div class="create__body">
+        <h1 class="create__title" id="create-title">Nouveau client</h1>
+        <p class="create__intro">
+            Le client est créé par <code>POST /api/v1/customers</code>. Le service répond avec son
+            <code>PublicId</code> — le seul identifiant exposé — et publie
+            <code>CustomerRegistered</code> sur le bus via l'outbox transactionnel.
+        </p>
+
+        <EditForm class="form" Model="form" OnValidSubmit="SubmitAsync" FormName="create-customer">
+            <FluentValidationValidator />
+
+            <div class="form__field">
+                <label class="form__label" for="firstName">Prénom</label>
+                <InputText id="firstName" class="form__input" @bind-Value="form.FirstName"
+                           disabled="@isSubmitting" autocomplete="given-name" />
+                <ValidationMessage For="() => form.FirstName" />
+            </div>
+
+            <div class="form__field">
+                <label class="form__label" for="lastName">Nom</label>
+                <InputText id="lastName" class="form__input" @bind-Value="form.LastName"
+                           disabled="@isSubmitting" autocomplete="family-name" />
+                <ValidationMessage For="() => form.LastName" />
+            </div>
+
+            <div class="form__field">
+                <label class="form__label" for="email">Email</label>
+                <InputText id="email" class="form__input" type="email" @bind-Value="form.Email"
+                           disabled="@isSubmitting" autocomplete="email" />
+                <ValidationMessage For="() => form.Email" />
+            </div>
+
+            <div class="form__field">
+                <label class="form__label" for="phone">
+                    Téléphone <span class="form__optional">(facultatif)</span>
+                </label>
+                <InputText id="phone" class="form__input" type="tel" @bind-Value="form.Phone"
+                           disabled="@isSubmitting" autocomplete="tel" />
+                <ValidationMessage For="() => form.Phone" />
+            </div>
+
+            @if (failure is not null)
+            {
+                <p class="form__error" role="alert">@failure</p>
+            }
+
+            <div class="form__actions">
+                <button type="submit" class="form__submit" disabled="@isSubmitting">
+                    @(isSubmitting ? "Création…" : "Créer le client")
+                </button>
+
+                <button type="button" class="form__secondary" disabled="@isSubmitting" @onclick="Reset">
+                    Réinitialiser
+                </button>
+
+                <a class="form__cancel" href="/customers">Annuler</a>
+            </div>
+        </EditForm>
+    </div>
+</section>
+
+@code {
+    private CreateCustomerForm form = new();
+    private bool isSubmitting;
+    private string? failure;
+
+    private async Task SubmitAsync()
+    {
+        isSubmitting = true;
+        failure = null;
+
+        try
+        {
+            var result = await CustomerFacade.CreateCustomerAsync(form);
+
+            switch (result.Outcome)
+            {
+                case CustomerCreationOutcome.Created:
+                    Navigation.NavigateTo($"/customers/{result.PublicId}");
+                    return;
+
+                case CustomerCreationOutcome.EmailAlreadyUsed:
+                    failure = $"Un client utilise déjà l'email {form.Email.Trim()}.";
+                    break;
+
+                case CustomerCreationOutcome.Rejected:
+                    failure = "Le service a refusé la saisie. Vérifiez les informations renseignées.";
+                    break;
+
+                default:
+                    failure = "Le service Customer est momentanément indisponible. Réessayez dans un instant.";
+                    break;
+            }
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private void Reset()
+    {
+        form = new CreateCustomerForm();
+        failure = null;
+    }
+}

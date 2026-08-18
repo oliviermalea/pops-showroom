@@ -1,0 +1,38 @@
+@* Success state: the page's customers, in a real table (semantic + accessible), scrollable on narrow screens. *@
+
+<div class="table-scroll">
+    <table class="table">
+        <caption class="table__caption">Clients enregistrés</caption>
+        <thead>
+            <tr>
+                <th scope="col">Nom</th>
+                <th scope="col">Email</th>
+                <th scope="col">Statut</th>
+                <th scope="col" class="table__col--date">Inscrit le</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in Items)
+            {
+                <tr @key="item.PublicId">
+                    <td>
+                        <a class="table__link" href="@($"/customers/{item.PublicId}")">@item.DisplayName</a>
+                    </td>
+                    <td class="table__email">@item.Email</td>
+                    <td>
+                        <span class="table__status @(item.IsActive ? "table__status--active" : null)">
+                            <span class="status-dot"></span>@item.Status
+                        </span>
+                    </td>
+                    <td class="table__col--date">@item.RegisteredOn</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    [Parameter]
+    [EditorRequired]
+    public IReadOnlyList<CustomerListItemView> Items { get; set; } = [];
+}
