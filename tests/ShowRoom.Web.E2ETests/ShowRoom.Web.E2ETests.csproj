@@ -13,13 +13,20 @@
 		<PackageReference Include="xunit.v3" />
 		<PackageReference Include="xunit.runner.visualstudio" />
 		<PackageReference Include="AwesomeAssertions" />
-		<PackageReference Include="bunit" />
-		<PackageReference Include="Bogus" />
+		<PackageReference Include="Microsoft.Playwright" />
+		<PackageReference Include="Testcontainers.PostgreSql" />
+		<PackageReference Include="Testcontainers.RabbitMq" />
 		<PackageReference Include="coverlet.collector" />
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\..\src\frontends\ShowRoom.Web\ShowRoom.Web.csproj" />
+		<!-- Aucune référence de projet : les applications sont lancées comme processus depuis leur propre
+		     sortie de build (voir ApplicationProcess). Le projet dépend donc de la construction préalable
+		     de la solution, pas d'un assemblage in-process. -->
+	</ItemGroup>
+
+	<ItemGroup>
+		<Using Include="Xunit" />
 	</ItemGroup>
 
 </Project>

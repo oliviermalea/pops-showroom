@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<IsPackable>false</IsPackable>
+		<OutputType>Exe</OutputType>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Update="appsettings.IntegrationTests.json">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.NET.Test.Sdk" />
+		<PackageReference Include="xunit.v3" />
+		<PackageReference Include="xunit.runner.visualstudio" />
+		<PackageReference Include="AwesomeAssertions" />
+		<PackageReference Include="coverlet.collector" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- Les deux hôtes de la chaîne : le front testé, et le service Customer qu'il consomme. -->
+		<ProjectReference Include="..\..\src\frontends\ShowRoom.Web\ShowRoom.Web.csproj" />
+		<!-- Aliase : le front et l'API declarent chacun un `Program` dans l'espace de noms global
+		     (top-level statements). L'alias leve l'ambiguite sans renommer quoi que ce soit. -->
+		<ProjectReference Include="..\..\src\backends\ShowRoom.Customer.Api\ShowRoom.Customer.Api.csproj">
+			<Aliases>customerapi</Aliases>
+		</ProjectReference>
+		<ProjectReference Include="..\..\src\modules\ShowRoom.Modules.Customer\ShowRoom.Modules.Customer.csproj" />
+		<ProjectReference Include="..\ShowRoom.Testing\ShowRoom.Testing.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Using Include="Xunit" />
+	</ItemGroup>
+
+</Project>

@@ -44,4 +44,8 @@
 		<PackageReference Include="WolverineFx" />
 	</ItemGroup>
 
+	<ItemGroup>
+	  <Folder Include="Features\CreatePublicOrder\" />
+	</ItemGroup>
+
 </Project>

@@ -41,5 +41,7 @@
     <Project Path="tests/ShowRoom.Modules.Product.IntegrationTests/ShowRoom.Modules.Product.IntegrationTests.csproj" />
     <Project Path="tests/ShowRoom.Architecture.Tests/ShowRoom.Architecture.Tests.csproj" />
     <Project Path="tests/ShowRoom.Web.Tests/ShowRoom.Web.Tests.csproj" />
+    <Project Path="tests/ShowRoom.Web.IntegrationTests/ShowRoom.Web.IntegrationTests.csproj" />
+    <Project Path="tests/ShowRoom.Web.E2ETests/ShowRoom.Web.E2ETests.csproj" />
   </Folder>
 </Solution>

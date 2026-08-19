@@ -119,7 +119,7 @@ Every data-driven screen must explicitly implement:
 - error behavior
 - success behavior
 
-### 4.2 Responsive — non négociable ⚠️
+### 4.2 Responsive — non-negotiable ⚠️
 Mobile traffic represents the majority of internet usage. **Every page and component must be fully responsive**, without exception.
 
 Mandatory rules:
@@ -226,9 +226,9 @@ It applies `padding-block: var(--space-8)` uniformly to every page rendered via 
 - Sections inside a page may use `padding-block` for their own internal rhythm, but must not duplicate the outer layout spacing.
 - Horizontal padding is handled by the `.container` utility class applied on `.layout__content`; pages must not add their own horizontal padding at the root level.
 
-### 10.3 Header et footer — pattern `__inner`
-Le `<header>` et le `<footer>` s'étendent sur toute la largeur de page (fond, bordure).  
-Leur **contenu** doit être enveloppé dans un `__inner` qui porte l'alignement horizontal :
+### 10.3 Header and footer — the `__inner` pattern
+The `<header>` and `<footer>` span the full page width (background, border).
+Their **content** must be wrapped in an `__inner` element that carries the horizontal alignment:
 
 ```css
 .site-header__inner,
@@ -241,25 +241,25 @@ Leur **contenu** doit être enveloppé dans un `__inner` qui porte l'alignement 
 }
 ```
 
-- Ne jamais mettre `padding-left/right` directement sur `.site-header` ou `.site-footer`.
-- Le `__inner` hérite automatiquement des réductions de `--container-pad` via les media queries globales.
-- `position: relative` (nécessaire au menu dropdown mobile) doit être posé sur `__inner`, pas sur l'élément `<header>`.
+- Never put `padding-left/right` directly on `.site-header` or `.site-footer`.
+- The `__inner` automatically inherits the `--container-pad` reductions from the global media queries.
+- `position: relative` (required by the mobile dropdown menu) belongs on `__inner`, not on the
+  `<header>` element itself.
 
-### 10.4 Overflow horizontal
-- Utiliser `overflow-x: clip` sur `.layout`, **jamais** `overflow-x: hidden` sur `body`.  
-  `hidden` sur `body` crée un nouveau contexte de défilement qui clippe les éléments `position: fixed` (scroll-to-top, menus).  
-  `clip` sur `.layout` bloque le débordement sans créer ce contexte.
+### 10.4 Horizontal overflow
+- Use `overflow-x: clip` on `.layout`, **never** `overflow-x: hidden` on `body`.
+  `hidden` on `body` creates a new scrolling context that clips `position: fixed` elements
+  (scroll-to-top, menus). `clip` on `.layout` blocks the overflow without creating that context.
 
-### 10.5 Débordement du contenu dans les cartes
-Tout texte long ou code (ex. `PublicId`, titres) doit être contraint :
-- Titres : `overflow-wrap: break-word`
-- Codes/identifiants : `word-break: break-all` + `max-width: 100%`
+### 10.5 Content overflow inside cards
+Any long text or code (e.g. a `PublicId`, a title) must be constrained:
+- Titles: `overflow-wrap: break-word`
+- Codes/identifiers: `word-break: break-all` + `max-width: 100%`
 
-### 10.6 Conséquence
+### 10.6 Consequence
 Any new Blazor page (feature or shared) must follow this contract so that all pages present identical outer spacing without per-page adjustments.
 
 ---
-
 ## 11) ShowRoom.Web project structure
 
 The project-specific structure for `src/frontends/ShowRoom.Web` must follow this layout:
@@ -317,215 +317,296 @@ The project-specific structure for `src/frontends/ShowRoom.Web` must follow this
 
 ---
 
-## Conventions frontend Blazor (validees)
+## Validated Blazor frontend conventions
 
-### Validation Blazor
-- FluentValidation (AbstractValidator<T>), jamais DataAnnotations sur les modeles de formulaire.
-- Composant FluentValidationValidator (Infrastructure/Validation/) - pattern de reference pour .NET 8+.
-- AddValidatorsFromAssemblyContaining<Program>(ServiceLifetime.Scoped) dans Program.cs.
-- Messages d'erreur en francais, orientes utilisateur final.
+Each subsection below records a decision that was implemented **and verified** on a concrete screen.
+The step it was validated on is named in the heading, so the context of the decision stays traceable.
+
+### Blazor validation
+- FluentValidation (`AbstractValidator<T>`), never DataAnnotations on form models.
+- A `FluentValidationValidator` component (`Infrastructure/Validation/`) — the reference pattern for
+  .NET 8+.
+- `AddValidatorsFromAssemblyContaining<Program>(ServiceLifetime.Scoped)` in `Program.cs`.
+- Error messages are written in French, addressed to the end user (the application's UI language).
 
 ### Facade
-- Un seul <Module>Facade par module, injecte en Scoped, derriere une interface `I<Module>Facade`
-  (placee a la racine de `Features/<Module>/`, partagee par tous les ecrans du module).
-- Blazor ne reference jamais le client d'API genere directement.
-- Transformations (formatage, mapping DTO <-> view model) dans la Facade, pas dans le composant.
+- One `<Module>Facade` per module, injected as Scoped, behind an `I<Module>Facade` interface (placed at
+  the root of `Features/<Module>/`, shared by every screen of that module).
+- Blazor never references the generated API client directly.
+- Transformations (formatting, DTO ↔ view model mapping) live in the facade, not in the component.
 
-### Client d'API (valide — etape « detail client »)
-- **Refit**, jamais Kiota, jamais un `HttpClient` nu dans un composant. L'interface vit dans
-  `Infrastructure/Api/Refit/<Module>/I<Module>Api.cs`, ses contrats de transport dans
-  `.../<Module>/Models/`, l'enregistrement dans `Infrastructure/Api/RefitRegistration.cs`.
-- Enregistrer via `AddRefitClient<T>(settings).ConfigureHttpClient(...)` pour passer par
-  `IHttpClientFactory` : on herite du service discovery Aspire et du handler de resilience de
-  ServiceDefaults, et les appels sortants rejoignent la trace distribuee.
-- Les methodes renvoient `ApiResponse<T>` (jamais `T` nu) : un `404`/`400` porte une **issue metier**,
-  traitee comme une donnee, pas comme une exception. La facade traduit les statuts en enum d'issue
-  (`Found` / `InvalidPublicId` / `NotFound` / `Unavailable`) et degrade toute panne transport en
-  `Unavailable` — l'ecran ne doit jamais remonter une exception non geree.
-- **Approche selective assumee** : interface ecrite a la main tant que la surface consommee est
-  etroite ; generation **Refitter** (`<module>.refitter` a la racine du projet web,
-  `refitter --settings-file ...`) quand elle s'elargit. La facade est la seule frontiere : passer de
-  l'un a l'autre ne doit toucher aucun appelant.
-- Cles Refitter valides a connaitre : `multipleInterfaces` (et non `generateMultipleInterfaces`),
-  `optionalParameters` (et non `generateOptionalParameters`), `operationNameTemplate` au niveau racine
-  (l'objet `naming` ne porte que `useOpenApiTitle` et `interfaceName`). `useSystemTextJson`,
-  `jsonSerializerOptions`, `typeForAdditionalProperties`, `generateResultTypes` n'existent pas cote
-  Refitter (ce sont des reglages NSwag) : la serialisation se configure dans les `RefitSettings` a
-  l'enregistrement.
-- Le format d'un identifiant public (`abc_` + 32 hex) est verifie au boundary avant l'appel
-  (`Infrastructure/PublicIds/PublicIdFormat`) : message precis cote UI et requete inutile evitee.
-  L'autorite sur le format reste le backend.
+### API client (validated — "customer detail" step)
+- **Refit**, never Kiota, never a bare `HttpClient` inside a component. The interface lives in
+  `Infrastructure/Api/Refit/<Module>/I<Module>Api.cs`, its transport contracts in `.../<Module>/Models/`,
+  its registration in `Infrastructure/Api/RefitRegistration.cs`.
+- Register through `AddRefitClient<T>(settings).ConfigureHttpClient(...)` so the client goes through
+  `IHttpClientFactory`: it inherits Aspire service discovery and the ServiceDefaults resilience handler,
+  and outgoing calls join the distributed trace.
+- Methods return `ApiResponse<T>` (never a bare `T`): a `404`/`400` carries a **business outcome**,
+  handled as data, not as an exception. The facade translates statuses into an outcome enum
+  (`Found` / `InvalidPublicId` / `NotFound` / `Unavailable`) and degrades any transport failure to
+  `Unavailable` — a screen must never surface an unhandled exception.
+- **A deliberately selective approach**: the interface is hand-written while the consumed surface stays
+  narrow; **Refitter** generation (`<module>.refitter` at the root of the web project,
+  `refitter --settings-file ...`) takes over when it widens. The facade is the only boundary: switching
+  from one to the other must touch no caller.
+- Valid Refitter keys worth knowing: `multipleInterfaces` (not `generateMultipleInterfaces`),
+  `optionalParameters` (not `generateOptionalParameters`), `operationNameTemplate` at the root level
+  (the `naming` object only carries `useOpenApiTitle` and `interfaceName`). `useSystemTextJson`,
+  `jsonSerializerOptions`, `typeForAdditionalProperties` and `generateResultTypes` do not exist in
+  Refitter (they are NSwag settings): serialization is configured in the `RefitSettings` at registration.
+- The format of a public identifier (`abc_` + 32 hex) is checked at the boundary
+  (`Infrastructure/PublicIds/PublicIdFormat`): a precise message for the UI, and a pointless request
+  avoided. The backend remains the authority on the format.
 
-### Etats d'ecran (valide — etape « detail client »)
-- Un ecran de donnees expose une branche par etat : chargement, vide/invite, invalide, introuvable,
-  indisponible (avec action « Reessayer »), succes. Chaque etat porte le role ARIA adapte
-  (`role="status"` + `aria-live` pour le chargement, `role="alert"` pour les erreurs).
-- Le composant ne formate rien : un `<Ecran>Mapper.FromApi(dto)` produit un view model deja
-  presentable (placeholder `—` pour une valeur absente, date localisee, booleen derive du statut).
-  Ce mapper est teste unitairement (nominal + cas limites), au meme titre qu'un assembleur backend.
-- Un stub ecrit a la main de l'interface Refit suffit a tester la facade (aucun framework de mock) :
-  un `ApiResponse<T>` se construit avec `new ApiResponse<T>(new HttpResponseMessage(status), content,
-  new RefitSettings())`.
+### Screen states (validated — "customer detail" step)
+- A data screen exposes one branch per state: loading, empty/prompt, invalid, not found, unavailable
+  (with a "Retry" action), success. Each state carries the right ARIA role (`role="status"` +
+  `aria-live` for loading, `role="alert"` for errors).
+- The component formats nothing: a `<Screen>Mapper.FromApi(dto)` produces a view model that is already
+  presentable (a `—` placeholder for a missing value, a localized date, a boolean derived from the
+  status). That mapper is unit-tested (nominal + edge cases), exactly like a backend assembler.
+- A hand-written stub of the Refit interface is enough to test the facade (no mocking framework): an
+  `ApiResponse<T>` is built with `new ApiResponse<T>(new HttpResponseMessage(status), content, new
+  RefitSettings())`.
 
-### Formulaire
-- Action principale + action secondaire (le cas echeant) + lien Annuler.
-- disabled=isSubmitting pendant soumission, message erreur si echec reseau.
-- NavigationManager.NavigateTo apres succes. Jamais d'identifiants techniques dans le formulaire.
+### Forms
+- A primary action + a secondary action (where relevant) + a Cancel link.
+- `disabled=isSubmitting` while submitting, an error message on network failure.
+- `NavigationManager.NavigateTo` after success. Never expose technical identifiers in the form.
 
-### Formulaire — regles validees (etape « creation client »)
-- Le validateur client reproduit les contraintes du backend (obligatoire, longueurs, format) pour un
-  retour immediat, mais le backend reste l'autorite : une regle qui ne peut etre tranchee que cote
-  serveur (unicite d'un email) revient en issue metier (409) et s'affiche en erreur de formulaire,
-  sans quitter la page.
-- `.Cascade(CascadeMode.Stop)` sur un champ enchainant `NotEmpty` + format : sinon un champ vide
-  affiche « obligatoire » ET « format invalide ».
-- Le `FluentValidationValidator` valide tout le modele a la soumission, mais sur un `OnFieldChanged`
-  il ne remplace QUE les messages du champ concerne (`messageStore.Clear(field)` puis re-ajout des
-  seules erreurs de ce champ) : vider tout le store ferait apparaitre des erreurs sur des champs
-  jamais touches, et ne clearer que le champ en re-ajoutant toutes les erreurs duplique les messages
-  des autres champs.
-- **CSS scope et composants enfants** : `EditForm`, `InputText`, `ValidationMessage` rendent leur
-  propre balise, qui ne porte PAS l'attribut de scope de la page — un `.form__input { ... }` dans
-  `Page.razor.css` ne s'applique donc jamais. Passer par `::deep` ancre sur un element de la page
-  (`.<page>__body ::deep .form__input`), ou styler globalement dans `app.css`. Verifier le style
-  reellement calcule (hauteur de champ, bordure) avant de considerer un formulaire termine.
-- **Reponse `201` renvoyant un identifiant nu** : Refit renvoie le corps **brut** pour un resultat
-  `string` (il ne passe pas par le serialiseur JSON), donc un corps `"cus_…"` conserve ses guillemets.
-  Les desencadrer dans la facade avant toute navigation, sinon ils finissent dans l'URL.
+### Forms — validated rules ("create customer" step)
+- The client-side validator mirrors the backend constraints (required, lengths, format) for immediate
+  feedback, but the backend stays the authority: a rule that can only be decided server-side (email
+  uniqueness) comes back as a business outcome (409) and is displayed as a form error, without leaving
+  the page.
+- `.Cascade(CascadeMode.Stop)` on a field chaining `NotEmpty` + format: otherwise an empty field shows
+  both "required" AND "invalid format".
+- The `FluentValidationValidator` validates the whole model on submit, but on an `OnFieldChanged` it
+  replaces ONLY the messages of the field concerned (`messageStore.Clear(field)` then re-adding only
+  that field's errors): clearing the whole store would surface errors on fields the user never touched,
+  and clearing only the field while re-adding all errors would duplicate the other fields' messages.
+- **CSS scope and child components**: `EditForm`, `InputText` and `ValidationMessage` render their own
+  tags, which do NOT carry the page's scope attribute — so a `.form__input { ... }` rule in
+  `Page.razor.css` never applies. Use `::deep` anchored on an element of the page
+  (`.<page>__body ::deep .form__input`), or style globally in `app.css`. Check the actually computed
+  style (field height, border) before considering a form finished.
+- **A `201` response returning a bare identifier**: Refit returns the **raw** body for a `string` result
+  (it does not go through the JSON serializer), so a `"cus_…"` body keeps its quotes. Unwrap them in the
+  facade before any navigation, or they end up in the URL.
 
 ### CSS scope
-- Page.razor.css scope isole par page. Variables design system uniquement (--color-*, --space-*, --font-size-*).
+- `Page.razor.css` is scoped per page. Design-system variables only (`--color-*`, `--space-*`,
+  `--font-size-*`).
 
 ### Navigation
-- Page liste : lien action principal dans le header. Modele POCO pur + validateur separe.
+- On a list page, the primary action is a link in the header. A pure POCO model plus a separate
+  validator.
 
-### Degradation cross-service (valide — etape « commandes du client »)
-- Un backend qui agrege d'autres services peut repondre `200` avec un **succes partiel** (ex.
-  `ordersAvailable = false`). L'ecran doit rendre cette nuance : garder ce qui est connu (l'identite du
-  client), afficher une banniere `role="status"` (pas `role="alert"` : ce n'est pas une erreur de la
-  requete) expliquant QUEL service manque, et proposer « Reessayer ». Ne jamais aplatir ce cas en
-  « indisponible » ni en « aucune donnee ».
-- Le view model distingue explicitement les trois cas : `OrdersAvailable=false` (degrade),
-  `IsEmpty` (le service a repondu, il n'y a rien), `HasOrders`. Un booleen unique ne suffit pas.
-- La facade **loggue le succes partiel en `LogWarning`** : sans cela la degradation est invisible en
-  production (le HTTP est un 200).
-- **Budget de temps du client HTTP** : un chemin de degradation ne repond qu'une fois le budget de
-  retries du backend epuise. Mesurer ce pire cas, puis configurer le client pour le depasser —
-  `AddStandardResilienceHandler` de ServiceDefaults coupe par defaut a **10 s par tentative**, ce qui
-  tue la reponse degradee et la transforme en « service indisponible ». Remplacer le pipeline pour ce
-  client (`RemoveAllResilienceHandlers` — API experimentale, suppression `EXTEXP0001` a scoper — puis
-  `AddStandardResilienceHandler(options => …)`), et reduire les retries : re-jouer un appel agregeant
-  de 16 s n'apporte aucune information.
+### Cross-service degradation (validated — "customer orders" step)
+- A backend that aggregates other services can answer `200` with a **partial success** (e.g.
+  `ordersAvailable = false`). The screen must render that nuance: keep what is known (the customer's
+  identity), show a `role="status"` banner (not `role="alert"`: the request itself did not fail)
+  explaining WHICH service is missing, and offer "Retry". Never flatten this case into "unavailable" nor
+  into "no data".
+- The view model distinguishes the three cases explicitly: `OrdersAvailable=false` (degraded), `IsEmpty`
+  (the service answered, there is nothing) and `HasOrders`. A single boolean is not enough.
+- The facade **logs the partial success as `LogWarning`**: without it the degradation is invisible in
+  production (the HTTP call is a 200).
+- **HTTP client time budget**: a degradation path only answers once the backend's retry budget is spent.
+  Measure that worst case, then configure the client to outlast it — the ServiceDefaults
+  `AddStandardResilienceHandler` cuts at **10 s per attempt** by default, which kills the degraded
+  response and turns it into "service unavailable". Replace the pipeline for that client
+  (`RemoveAllResilienceHandlers` — an experimental API, scope the `EXTEXP0001` suppression — then
+  `AddStandardResilienceHandler(options => …)`), and reduce the retries: replaying a 16 s aggregating
+  call brings no new information.
 
-### Modele d'hebergement et render modes (valide — etapes « streaming » et « SSR statique »)
-- ShowRoom.Web est une **Blazor Web App** (modele unifie .NET 8+, projet unique, `blazor.web.js`).
-  « Blazor hosted » n'existe plus : c'etait le template ASP.NET Core hosted WebAssembly de .NET 6/7,
-  remplace par les render modes. « Blazor Hybrid » est une coquille native (MAUI) : hors sujet ici.
-- Le client Refit et la facade vivent **cote serveur** : le navigateur ne connait aucune URL d'API. Cette
-  propriete BFF est un choix a defendre — passer en `InteractiveWebAssembly`/`InteractiveAuto` impose un
-  projet Client, du CORS, de l'auth cote navigateur, et **alourdit le premier chargement**. WASM ne
-  reduit pas le temps de chargement : il le deplace vers les interactions suivantes.
-- **Le render mode se decide par ecran.** `App.razor` ne pose AUCUN `@rendermode` : le defaut est le SSR
-  statique, et seuls les ecrans qui en ont besoin declarent `@rendermode InteractiveServer`. Un ecran de
-  lecture n'a pas besoin de circuit.
-- Sur un ecran statique, les interactions passent par le web : **formulaire GET** pour un filtre (l'etat
-  atterrit dans la query string, donc URL partageable), **liens** pour la pagination et les actions
-  « Reessayer ». Un lien de pagination indisponible est un `<span aria-disabled="true">`, jamais un `<a>`
-  inerte. La navigation enrichie evite le rechargement complet.
-- **La coquille (layout) ne doit pas etre interactive** : un `@onclick` sur le menu ou le scroll-top
-  rouvre un circuit sur CHAQUE page et annule tout le benefice. Ces comportements purement locaux vont
-  dans un module JS (`wwwroot/App/Layout/shell.js`) avec des ecouteurs **delegues sur `document`**, pour
-  survivre au remplacement du DOM par la navigation enrichie (`enhancedload`).
-- Tout ecran dont le rendu attend un appel reseau declare `@attribute [StreamRendering]`. Sans lui, la
-  reponse HTML est retenue jusqu'a la fin du composant : mesure sur un chemin degrade a 6,3 s → TTFB
-  6,36 s sans streaming contre 0,03 s avec. Le squelette n'a de valeur que s'il est **envoye**
-  immediatement : squelette et streaming vont ensemble.
-- Verifier le resultat sur le HTML servi, pas sur une intention : `curl` puis compter les marqueurs
-  `"type":"server"` (0 = aucun composant interactif, donc aucun circuit). Et mesurer avec
+### Hosting model and render modes (validated — "streaming" and "static SSR" steps)
+- ShowRoom.Web is a **Blazor Web App** (the unified .NET 8+ model, single project, `blazor.web.js`).
+  "Blazor hosted" no longer exists: it was the .NET 6/7 ASP.NET Core hosted WebAssembly template,
+  replaced by render modes. "Blazor Hybrid" is a native shell (MAUI): out of scope here.
+- The Refit client and the facade live **server-side**: the browser knows no API URL. This BFF property
+  is a choice to defend — moving to `InteractiveWebAssembly`/`InteractiveAuto` requires a Client project,
+  CORS, browser-side auth, and **makes the first load heavier**. WASM does not reduce load time: it
+  shifts it to subsequent interactions.
+- **The render mode is decided per screen.** `App.razor` sets NO `@rendermode`: the default is static
+  SSR, and only the screens that need it declare `@rendermode InteractiveServer`. A read-only screen
+  does not need a circuit.
+- On a static screen, interactions go through the web: a **GET form** for a filter (the state lands in
+  the query string, so the URL is shareable), and **links** for pagination and "Retry" actions. An
+  unavailable pagination link is a `<span aria-disabled="true">`, never an inert `<a>`. Enhanced
+  navigation avoids a full reload.
+- **The shell (layout) must not be interactive**: an `@onclick` on the menu or the scroll-to-top button
+  reopens a circuit on EVERY page and cancels the whole benefit. Those purely local behaviours belong in
+  a JS module (`wwwroot/App/Layout/shell.js`) with listeners **delegated on `document`**, so they survive
+  the DOM being replaced by enhanced navigation (`enhancedload`).
+- Any screen whose rendering awaits a network call declares `@attribute [StreamRendering]`. Without it
+  the HTML response is held back until the component completes: measured on a 6.3 s degraded path, TTFB
+  was 6.36 s without streaming against 0.03 s with it. A skeleton is only worth anything if it is
+  **sent** immediately: skeleton and streaming go together.
+- Verify the result on the served HTML, not on intent: `curl`, then count the `"type":"server"` markers
+  (0 = no interactive component, hence no circuit). And measure with
   `curl -w "TTFB=%{time_starttransfer} TOTAL=%{time_total}"`.
 
-### Compression et cache HTTP (valide — etape « compression / cache »)
-- `UseResponseCompression` (Brotli + Gzip) sur les reponses **dynamiques** uniquement. Ne pas y ajouter
-  les assets statiques : `MapStaticAssets` les sert deja pre-compresses et empreintes.
-- `EnableForHttps = true` est un choix a re-examiner le jour ou une authentification arrive : compresser
-  sous TLS reouvre la classe BREACH quand une reponse melange un secret et une entree controlee par
-  l'attaquant. Aujourd'hui ces pages ne portent ni secret ni jeton de session.
-- **Streaming et compression s'excluent** : une reponse `[StreamRendering]` sort en
-  `Content-Encoding: identity`. Arbitrer par page — le streaming gagne des que la donnee peut etre lente
-  (TTFB 0,03 s au lieu de 6,36 s sur un chemin degrade), la compression gagne sur une page rapide et
-  volumineuse (−72 % sur l'accueil). Ne pas supposer que les deux s'additionnent : le verifier avec
-  `curl -H "Accept-Encoding: br" -D -`.
-- Un ecran portant des donnees metier personnelles emet **`no-store, no-cache, must-revalidate`**. Le
-  poser dans un middleware **par chemin** : un composant `[StreamRendering]` a deja vide ses en-tetes
-  quand il s'execute.
-- **Ne pas mettre d'output cache sur une page Razor Components SSR** : elle emet un `Set-Cookie`
-  antiforgery, l'output cache refuse donc de la stocker — et le forcer distribuerait le jeton d'un
-  visiteur a tous les autres. Mesurer avant de conclure a un gain : un cache qui n'atteint jamais son
-  cache-hit est du code mort trompeur, il vaut mieux le supprimer.
+### Compression and HTTP caching (validated — "compression / caching" step)
+- `UseResponseCompression` (Brotli + Gzip) applies to **dynamic** responses only. Do not add static
+  assets to it: `MapStaticAssets` already serves them pre-compressed and fingerprinted.
+- `EnableForHttps = true` is a choice to revisit the day authentication arrives: compressing under TLS
+  reopens the BREACH class of attacks when a response mixes a secret with attacker-controlled input.
+  Today these pages carry neither a secret nor a session token.
+- **Streaming and compression are mutually exclusive**: a `[StreamRendering]` response goes out as
+  `Content-Encoding: identity`. Arbitrate per page — streaming wins as soon as the data can be slow
+  (TTFB 0.03 s instead of 6.36 s on a degraded path), compression wins on a fast and bulky page (−72% on
+  the home page). Do not assume the two add up: verify it with `curl -H "Accept-Encoding: br" -D -`.
+- A screen carrying personal business data emits **`no-store, no-cache, must-revalidate`**. Set it in a
+  **path-based** middleware: a `[StreamRendering]` component has already flushed its headers by the time
+  it runs.
+- **Do not put an output cache on an SSR Razor Components page**: it emits an antiforgery `Set-Cookie`,
+  so the output cache refuses to store it — and forcing it would hand one visitor's token to all the
+  others. Measure before concluding there is a gain: a cache that never reaches a hit is misleading dead
+  code, better deleted.
 
-### Etat de chargement (valide — etape « squelette de liste »)
-- Un ecran de donnees n'affiche pas « Chargement… » : il rend un **squelette** qui reproduit la
-  structure reelle (memes colonnes, memes metriques de ligne), pour que l'arrivee des donnees soit une
-  substitution et non un saut de mise en page.
-- Le squelette porte `role="status"` + `aria-busy="true"` + `aria-live="polite"` + un `aria-label`
-  explicite ; ses lignes sont `aria-hidden="true"` (des barres decoratives n'ont rien a annoncer).
-- **Duree minimale d'affichage : uniquement en rendu interactif.** Quand le squelette est bascule
-  cote client, un plancher (~350 ms) evite un clignotement. En **SSR + streaming**, il fait partie du
-  premier flush HTML et le navigateur coalesce les peintures : le plancher n'evite plus rien et
-  retarde la reponse complete d'autant (mesure : 381 ms avec, 52 ms sans). Ne pas le poser par reflexe.
-- Le squelette **annonce** l'arrivee d'un tableau, il n'egale pas sa hauteur finale : le calquer sur la
-  taille de page a coute +31 % de poids (21,6 → 28,4 Ko) a chaque requete, pour une fidelite utile
-  seulement sur un chargement lent. Un nombre de lignes sobre et constant suffit.
-- En SSR statique, **un champ d'instance ne survit pas d'une requete a l'autre** : chaque requete
-  instancie un composant neuf. Toute « memoire » entre deux rendus (nombre de lignes precedent, etat
-  d'ecran) y est du code mort — la verifier avant de l'ecrire.
-- Les elements peripheriques qui disparaissent pendant le chargement (pagination, compteur) restent
-  **rendus** et sont masques en `visibility: hidden` — jamais retires du DOM : `display: none` libere
-  leur place et fait sauter le contenu au retour des donnees.
-- Le scintillement est un `@keyframes` sur un `linear-gradient` (`background-size: 200% 100%`), et le
-  panneau de resultat arrive en fondu court. Les deux sont **desactives** sous
-  `@media (prefers-reduced-motion: reduce)`.
+### Loading state (validated — "list skeleton" step)
+- A data screen does not display "Loading…": it renders a **skeleton** reproducing the real structure
+  (same columns, same row metrics), so that the arrival of data is a substitution rather than a layout
+  jump.
+- The skeleton carries `role="status"` + `aria-busy="true"` + `aria-live="polite"` + an explicit
+  `aria-label`; its rows are `aria-hidden="true"` (decorative bars have nothing to announce).
+- **Minimum display duration: only in interactive rendering.** When the skeleton is swapped client-side,
+  a floor (~350 ms) avoids a flicker. Under **SSR + streaming** it is part of the first HTML flush and
+  the browser coalesces paints: the floor no longer prevents anything and delays the full response by
+  just as much (measured: 381 ms with, 52 ms without). Do not add it reflexively.
+- The skeleton **announces** the arrival of a table, it does not have to equal its final height: sizing
+  it on the page size cost +31% in weight (21.6 → 28.4 KB) on every request, for a fidelity that only
+  matters on a slow load. A sober, constant number of rows is enough.
+- Under static SSR, **an instance field does not survive from one request to the next**: every request
+  instantiates a fresh component. Any "memory" between two renders (previous row count, screen state) is
+  dead code there — verify before writing it.
+- Peripheral elements that disappear during loading (pagination, counter) stay **rendered** and are
+  hidden with `visibility: hidden` — never removed from the DOM: `display: none` frees their space and
+  makes the content jump when data arrives.
+- The shimmer is a `@keyframes` over a `linear-gradient` (`background-size: 200% 100%`), and the result
+  panel arrives with a short fade. Both are **disabled** under `@media (prefers-reduced-motion: reduce)`.
 
-### Liste paginee (valide — etape « liste clients »)
-- L'etat de la liste (page, filtres) vit dans la **query string**, jamais dans un champ prive :
-  `[SupplyParameterFromQuery]` + `NavigationManager.NavigateTo("/x?page=2&search=…")`. L'ecran reste
-  partageable par URL et le bouton Retour du navigateur fonctionne. Ne pas serialiser les valeurs par
-  defaut (`page=1`, recherche vide) : l'URL canonique reste propre.
-- Le composant d'une page nommee `Page.razor` s'appelle `Page` : un parametre `Page` ne compile pas
-  (CS0542). Nommer la propriete `PageNumber` et mapper la cle via
+### Paginated list (validated — "customer list" step)
+- The list state (page, filters) lives in the **query string**, never in a private field:
+  `[SupplyParameterFromQuery]` + `NavigationManager.NavigateTo("/x?page=2&search=…")`. The screen stays
+  shareable by URL and the browser's Back button works. Do not serialize default values (`page=1`, empty
+  search): the canonical URL stays clean.
+- The component of a page named `Page.razor` is called `Page`: a `Page` parameter does not compile
+  (CS0542). Name the property `PageNumber` and map the key with
   `[SupplyParameterFromQuery(Name = "page")]`.
-- La facade **normalise** page et pageSize (bornes min/max) avant l'appel : une query string editee a
-  la main ne doit jamais produire un 400 backend.
-- Le view model expose l'etat de navigation **derive** (`HasPrevious`, `HasNext`, `FirstItemIndex`,
-  `LastItemIndex`, `IsEmpty`) — le composant n'ecrit aucun calcul. Ne pas se fier aux champs
-  `hasPrevious`/`hasNext` renvoyes par l'API : les rederiver des numeros de page.
-- Etat vide **contextuel** : « aucun element » et « aucun resultat pour tel filtre » sont deux
-  messages distincts.
-- Donnees tabulaires = vraie `<table>` (`<caption>` en classe visually-hidden, `<th scope="col">`),
-  enveloppee dans un conteneur `overflow-x: auto`. En mobile, masquer la ou les colonnes secondaires
-  plutot que d'imposer un defilement horizontal.
-- Le formatage partage par plusieurs ecrans d'un meme module (date, placeholder, libelle de statut)
-  va dans un `<Module>Format` unique : une fiche et une ligne de liste doivent afficher la meme
-  donnee de la meme facon.
+- The facade **normalizes** page and pageSize (min/max bounds) before the call: a hand-edited query
+  string must never produce a backend 400.
+- The view model exposes **derived** navigation state (`HasPrevious`, `HasNext`, `FirstItemIndex`,
+  `LastItemIndex`, `IsEmpty`) — the component writes no computation. Do not rely on the
+  `hasPrevious`/`hasNext` fields returned by the API: re-derive them from the page numbers.
+- A **contextual** empty state: "no items" and "no results for this filter" are two distinct messages.
+- Tabular data means a real `<table>` (a `<caption>` in a visually-hidden class, `<th scope="col">`),
+  wrapped in an `overflow-x: auto` container. On mobile, hide the secondary column(s) rather than forcing
+  horizontal scrolling.
+- Formatting shared by several screens of the same module (date, placeholder, status label) belongs in a
+  single `<Module>Format`: a detail card and a list row must display the same data the same way.
 
-### Design system swiss (valide — etape « page d'accueil »)
-- Un seul point de definition des tokens : `wwwroot/app.css` (`--color-*`, `--space-*`, `--font-size-*`,
-  `--line-height-*`, `--transition-*`, `--container-*`, `--max-col-text`). Aucune valeur brute (hex, px
-  de couleur, famille de police) dans un `*.razor.css` : uniquement `var(--token)`.
-- Style suisse : Helvetica Neue, echelle d'espacement en multiples de 8px, aplats et filets 1px
-  (`.rule`), rayons quasi nuls (2px max), libelles de section en capitales espacees (`.section-label`),
-  aucun framework CSS (pas de Bootstrap).
-- Composition d'une page editoriale : sections en grille `3fr 9fr` (label / corps) separees par des
-  filets `.rule`, titres en `--font-size-xl`/`2xl`, textes secondaires en `--color-muted` bornes a
-  `--max-col-text`.
-- Les diagrammes sont du **SVG inline** dans la page (pas d'image binaire) : ils consomment les memes
-  `var(--color-*)`, restent nets a toute densite et portent `role="img"` + `aria-label` decrivant le
-  schema.
-- Les assets JS de la coquille technique vont dans `wwwroot/App/<Zone>/<nom>.js` (module ES importe
-  par `IJSRuntime`), ceux d'une feature dans `wwwroot/<Feature>/...`. Toujours desabonner les listeners
-  dans `DisposeAsync`.
-- Attribut ARIA pilote par un booleen : ecrire `aria-expanded="@(isOpen ? "true" : "false")"`. Un
-  `aria-expanded="@isOpen"` rend un attribut vide (semantique booleenne Blazor) : la valeur `"true"`
-  n'existe jamais, ce qui casse a la fois l'accessibilite et les selecteurs
-  `[aria-expanded="true"]`.
-- Etats de menu mobile : `.menu-toggle` >= 44x44px, backdrop cliquable, fermeture au clic sur un lien.
+### bUnit component tests (validated — "bUnit tests" step)
+- **Stack**: `bunit` 2.x on **xUnit v3** + **AwesomeAssertions** (never FluentAssertions here:
+  AwesomeAssertions is this repository's convention). The bUnit v2 base class is **`BunitContext`**
+  (renamed from `TestContext`, which collided with xUnit v3's own `TestContext`), and rendering is done
+  with `Render<TComponent>(p => p.Add(...))`.
+- **One test project per front end** (`ShowRoom.Web.Tests`), whose tree mirrors the code
+  (`Features/<Module>/<Screen>/`). No separate project for components.
+- **No mocking framework**: injected services are doubled by hand (`StubCustomerFacade`), fed the outcome
+  the facade would produce. The test then reads as "given the service answers X, the screen shows Y".
+- **Stable, semantic selectors first**: `[role='alert']`, `[role='status']`, `nav[aria-label='…']`,
+  `a[href='…']`, `table`/`th[scope='col']`, a field's `#id`. Those selectors describe what the user and
+  assistive technologies perceive; a CSS class is used only when nothing semantic exists. Do not add a
+  `data-testid` in place of a missing role: it is the role that must be added.
+- **One test = one user scenario**: found / not found / invalid identifier / service unavailable /
+  partial success. Cases that resemble each other must be told apart explicitly ("no orders" ≠ "Order
+  service unreachable") — that is precisely what a test protects.
+- **Loading states**: suspend the double with a `TaskCompletionSource` handed to the stub, assert the
+  skeleton (`aria-busy`) and the reserved space, then release and await with
+  `await cut.WaitForAssertionAsync(...)`.
+- **The real validator is injected**, not simulated: its messages are observable behaviour.
+- `[SupplyParameterFromQuery]` works under bUnit: navigate the `NavigationManager` (a fake is provided)
+  to `"/screen?param=value"` BEFORE rendering. Navigation triggered by the component is asserted on
+  `NavigationManager.Uri`.
+- Do NOT test in bUnit what a unit test covers better (mapping, validation, facade): bUnit is for
+  rendering and interactions.
+
+### Front-end integration tests (validated — "disposable database" step)
+- **Strict separation of the two levels, by project.** `ShowRoom.Web.Tests` (bUnit) knows NEITHER Docker,
+  NOR `HttpClient`, NOR `WebApplicationFactory` — 1 s for the whole suite.
+  `ShowRoom.Web.IntegrationTests` does NOT use bUnit. Mixing both in one project would produce a hybrid
+  category: no longer a fast unit test, not yet a genuine end-to-end test.
+- **Admission criterion for the integration suite**: the container must buy a signal the component tests
+  cannot produce (the real route, a query string translated into SQL, round-trip serialization, pipeline
+  headers). A client-side rejection or a status message is proven without a network: it stays in bUnit.
+  Keep this suite **short** — a few critical scenarios, not a mirror of the component suite.
+- bUnit tests double the facade: they NEVER see the real HTTP contract (route, query string,
+  serialization). A second level is therefore required, otherwise a backend contract break leaves the
+  suite green.
+- A Blazor front end is an ASP.NET Core application: it is hosted with `WebApplicationFactory<TEntryPoint>`
+  like an API. **Chaining the two hosts** is the clean way to test the full chain without a network: the
+  front-end factory replaces the primary handler of its `HttpClient`s with `apiFactory.Server.CreateHandler()`,
+  and the API factory carries its disposable PostgreSQL container (the `ShowRoom.Testing` harness).
+  ```csharp
+  services.ConfigureHttpClientDefaults(c => c.ConfigurePrimaryHttpMessageHandler(() => backendHandler));
+  ```
+- **Seed through the public API**, not through the DbContext: the data set goes through the real write
+  path, and the test does not couple itself to the schema. It disappears with the container.
+- **One fixture per test class** (`IClassFixture`) = one container per class. A test asserting "the
+  database is empty" must be ALONE in its class: xUnit does not guarantee ordering within a class, and a
+  seeding test would break it.
+- This level is only usable because the read screens are in **static SSR**: the returned HTML contains
+  the data, so it is assertable without a browser.
+- **Decode the HTML before asserting** (`WebUtility.HtmlDecode`): Razor encodes entities, "é" arrives as
+  `&#xE9;`, and an assertion on accented text would fail on an otherwise correct page.
+- If the test project references several ASP.NET Core hosts, their `Program` classes (top-level
+  statements) collide in the global namespace: disambiguate with an `<Aliases>` on the `ProjectReference`
+  plus `extern alias`, rather than renaming anything.
+
+### Playwright browser journeys (validated — "E2E" step)
+- **This level only exists for what the others cannot see**: Blazor's interactive circuit and the shell
+  JavaScript. Anything provable by rendering (bUnit) or over HTTP (integration) has no business here: a
+  few critical journeys, not a mirror of the other suites.
+- **Launch the applications as real processes**, from their own output directory, rather than
+  `WebApplicationFactory` + Kestrel: in-process, the front end's static asset manifest is not copied into
+  the test project's output, `blazor.web.js` and `app.css` answer 500, and the page stays frozen on its
+  skeleton — exactly what Playwright is supposed to exercise. As processes, the content root, wwwroot,
+  manifests and configuration are those of a deployment.
+- **Override configuration through environment variables**: they win over `appsettings.Development.json`,
+  unlike host configuration. Keep the `Development` environment — it is what wires the static assets the
+  way the browser expects them.
+- **Wait for the circuit before interacting** (`page.WaitForWebSocketAsync()` before navigation): on an
+  `InteractiveServer` screen the page is first prerendered statically, and input sent too early is
+  **lost**, not deferred.
+- **An open WebSocket is not enough**: between the connection and the attachment of event handlers, the
+  very first event can still be lost. Absorb that cost once in the fixture, with a **retried** probe until
+  an observable reaction occurs — never a fixed delay, which will be either too short or wasted time.
+- **A Blazor navigation produces no `load` event**: `WaitForURLAsync` (which waits for one by default)
+  times out. Assert the URL with `Expect(page).ToHaveURLAsync(...)`, which retries.
+- Widen the assertion timeout (`Assertions.SetDefaultExpectTimeout`): 5 s by default is too short for a
+  first render paying for JIT and the EF model, and would produce intermittent failures rather than real
+  regressions.
+- **Verify stability before committing**: run the suite several times in a row. An intermittent E2E test
+  costs more than no test at all.
+
+### Swiss design system (validated — "home page" step)
+- A single definition point for tokens: `wwwroot/app.css` (`--color-*`, `--space-*`, `--font-size-*`,
+  `--line-height-*`, `--transition-*`, `--container-*`, `--max-col-text`). No raw value (hex, colour px,
+  font family) in a `*.razor.css`: only `var(--token)`.
+- Swiss style: Helvetica Neue, a spacing scale in multiples of 8px, flat areas and 1px rules (`.rule`),
+  near-zero radii (2px max), section labels in spaced uppercase (`.section-label`), no CSS framework (no
+  Bootstrap).
+- Composition of an editorial page: sections on a `3fr 9fr` grid (label / body) separated by `.rule`
+  lines, titles at `--font-size-xl`/`2xl`, secondary text in `--color-muted` bounded by `--max-col-text`.
+- Diagrams are **inline SVG** in the page (never a binary image): they consume the same `var(--color-*)`,
+  stay sharp at any density, and carry `role="img"` + an `aria-label` describing the diagram.
+- JS assets of the technical shell go in `wwwroot/App/<Zone>/<name>.js` (an ES module imported through
+  `IJSRuntime`), those of a feature in `wwwroot/<Feature>/...`. Always unsubscribe listeners in
+  `DisposeAsync`.
+- An ARIA attribute driven by a boolean: write `aria-expanded="@(isOpen ? "true" : "false")"`. An
+  `aria-expanded="@isOpen"` renders an empty attribute (Blazor's boolean attribute semantics): the value
+  `"true"` never exists, which breaks both accessibility and `[aria-expanded="true"]` selectors.
+- Mobile menu states: `.menu-toggle` >= 44x44px, a clickable backdrop, closing on a link click.

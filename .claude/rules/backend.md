@@ -275,18 +275,18 @@ Cross-module (and future cross-service) data exchange goes over **RabbitMQ via W
 - A module persists only its own data.
 - No direct access to other module tables/collections.
 
-### 4.1.1 Index et colonnes de tri (obligatoire)
-- Toute colonne servant l'`ORDER BY` d'une **liste paginee** doit porter un index, declare dans la
-  `IEntityTypeConfiguration` (`HasIndex(...).IsDescending()` quand le tri est descendant) et livre par
-  une **migration EF** — jamais un `CREATE INDEX` a la main, qui ferait diverger la base du schema
-  versionne. Sans index, PostgreSQL parcourt puis trie la table entiere a CHAQUE page : mesure a
-  200 000 lignes, tri sur disque (`external merge`, 9,8 Mo) et 41 ms par page, contre 0,12 ms ensuite.
-- Un index est **invisible dans les tests de comportement** (tout passe sans lui, juste plus lentement) :
-  l'ancrer par un test sur le modele (`GetService<IDesignTimeModel>().Model`, pas `context.Model` qui
-  est optimise pour l'execution et perd le sens de tri).
-- Connaitre les deux limites que l'index ne leve pas : un `OFFSET` profond parcourt quand meme toutes
-  les entrees precedentes (reponse : pagination *keyset*), et un `ILIKE '%…%'` reste un scan complet
-  (reponse : index GIN + pg_trgm).
+### 4.1.1 Indexes and sort columns (mandatory)
+- Any column serving the `ORDER BY` of a **paginated list** must carry an index, declared in the
+  `IEntityTypeConfiguration` (`HasIndex(...).IsDescending()` when the sort is descending) and shipped by
+  an **EF migration** — never a hand-written `CREATE INDEX`, which would make the database diverge from
+  the versioned schema. Without the index, PostgreSQL scans then sorts the whole table on EVERY page:
+  measured at 200,000 rows, the sort spilled to disk (`external merge`, 9.8 MB) at 41 ms per page,
+  against 0.12 ms once indexed.
+- An index is **invisible to behaviour tests** (everything passes without it, just more slowly): pin it
+  with a test on the model (`GetService<IDesignTimeModel>().Model`, not `context.Model`, which is
+  optimised for execution and loses the sort direction).
+- Know the two limits the index does NOT lift: a deep `OFFSET` still walks all preceding entries (answer:
+  *keyset* pagination), and an `ILIKE '%…%'` remains a full scan (answer: a GIN + pg_trgm index).
 
 ### 4.2 ACL placement
 For external integrations, place in `Persistence` (or `AntiCorruption/Adapters`):

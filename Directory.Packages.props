@@ -13,6 +13,7 @@
     <PackageVersion Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.4.6" />
     <PackageVersion Include="AwesomeAssertions" Version="9.5.0" />
     <PackageVersion Include="Bogus" Version="35.6.5" />
+    <PackageVersion Include="bunit" Version="2.9.0" />
     <PackageVersion Include="coverlet.collector" Version="10.0.1" />
     <PackageVersion Include="FluentValidation" Version="12.1.1" />
     <PackageVersion Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
@@ -46,6 +47,7 @@
     <!-- Must stay in [2.7.5, 3.0.0): Microsoft.AspNetCore.OpenApi 10.0.x's XML-comment source generator
          targets Microsoft.OpenApi 2.x; 3.x made IOpenApiMediaType.Example read-only and breaks codegen. -->
     <PackageVersion Include="Microsoft.OpenApi" Version="2.7.5" />
+    <PackageVersion Include="Microsoft.Playwright" Version="1.62.0" />
     <PackageVersion Include="Npgsql.OpenTelemetry" Version="10.0.3" />
     <PackageVersion Include="Refit" Version="11.2.0" />
     <PackageVersion Include="Refit.HttpClientFactory" Version="11.2.0" />

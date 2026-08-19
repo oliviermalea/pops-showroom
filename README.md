@@ -1,629 +1,765 @@
 # ShowRoom
 
-> POC .NET 10 démontrant une architecture **modulith → distribuée** : bounded contexts isolés,
-> communication **machine-to-machine par messaging AMQP** (jamais HTTP), orchestration **.NET Aspire**
-> et observabilité **OpenTelemetry** de bout en bout.
+> .NET 10 proof of concept demonstrating a **modulith → distributed** architecture: isolated bounded
+> contexts, **machine-to-machine communication over AMQP messaging** (never HTTP), **.NET Aspire**
+> orchestration and end-to-end **OpenTelemetry** observability.
 
-Le scénario métier fil rouge : **un client consulte son profil, l'historique de ses commandes et le
-détail d'un produit** — chaque capacité vivant dans un bounded context distinct.
+The guiding business scenario: **a customer consults their profile, their order history and a product's
+details** — each capability living in its own bounded context.
 
-> ℹ️ **Maintenance** — ce README est la documentation racine unique du dépôt. Il doit être **tenu à
-> jour en continu** : toute évolution de topologie, de service ou de contrat d'API doit s'y refléter
-> (voir `.claude/rules/global.md` §3).
+> ℹ️ **Maintenance** — this README is the single root documentation of the repository. It must be **kept
+> up to date continuously**: any change to the topology, a service or an API contract has to be
+> reflected here (see `.claude/rules/global.md` §3).
 
 ---
 
-## Sommaire
+## Contents
 
-- [Topologie](#topologie)
-- [Stack technique](#stack-technique)
-- [Principes d'architecture](#principes-darchitecture)
-- [Structure de la solution](#structure-de-la-solution)
-- [Démarrage](#démarrage)
-- [APIs disponibles](#apis-disponibles)
-- [Front Blazor (ShowRoom.Web)](#front-blazor-showroomweb)
-- [Messaging & observabilité](#messaging--observabilité)
+- [Minimum Viable Architecture](#minimum-viable-architecture)
+- [Topology](#topology)
+- [Technical stack](#technical-stack)
+- [Solution layout](#solution-layout)
+- [Getting started](#getting-started)
+- [Available APIs](#available-apis)
+- [Blazor front end (ShowRoom.Web)](#blazor-front-end-showroomweb)
+- [Messaging & observability](#messaging--observability)
 - [Tests](#tests)
 
 ---
 
-## Topologie
+## Minimum Viable Architecture
 
-Le système est **distribué** : le bounded context *Customer* est extrait dans son propre service, qui
-dialogue avec le service *Business* (Order + Product) **uniquement via RabbitMQ** (request/reply
-Wolverine). Les services partagent **une seule base PostgreSQL** (`showroom`) ; l'isolation entre
-modules est assurée par **un schéma dédié par module** (`customers`, `orders`, `products`) — séparation
-logique, pas physique. Un schéma `wolverine` supplémentaire héberge le **message store** de l'outbox
-transactionnel (tables gérées par Wolverine, à côté du schéma métier — pas un second DbContext).
+The smallest set of decisions that keeps this system **evolvable**: enough structure to extract a module
+into its own service later, not so much ceremony that delivery slows down today. Two properties make it
+"viable" rather than aspirational:
 
-Deux styles de messagerie coexistent :
-- **request/reply synchrone** (`IMessageBus.InvokeAsync`) pour lire les données d'un autre module
-  (`GetOrdersForCustomer`) — sans garantie de livraison, avec dégradation gracieuse ;
-- **publish/subscribe garanti** via l'**outbox transactionnel** pour les *IntegrationEvents*
-  (`CustomerRegisteredIntegrationEvent`) — livraison au moins une fois, l'enveloppe étant persistée dans
-  la **même transaction** que le changement métier (même DbContext, même connexion) puis délivrée à
-  RabbitMQ avec retries.
+- every rule below is **enforced somewhere** — an architecture test, a guardrail test, or a measurement.
+  A principle nobody enforces is a wish;
+- every rule is **reversible in one place**. Nothing here requires rewriting the system to change course.
+
+The authoritative rules live in [`.claude/rules/`](.claude/rules); what follows is the architecture they
+encode.
+
+### 1. One module per bounded context, one schema per module
+
+A business domain is an isolated module (`Customer`, `Order`, `Product`). Modules share a single
+PostgreSQL database but never a schema: `customers`, `orders`, `products`. The separation is **logical,
+not physical** — which is exactly what makes extraction cheap: `Customer` already moved into its own
+service without a data migration.
+
+No module reads another module's tables. Ever.
+
+### 2. Vertical Slice + REPR inside a module
+
+A module is organised by **feature**, not by technical layer. Each slice holds everything the feature
+needs, side by side:
+
+```text
+Features/CreateCustomer/
+  CreateCustomerCommand.cs         # Request
+  CreateCustomerEndpoint.cs        # Endpoint (Minimal API)
+  CreateCustomerCommandHandler.cs  # Handler
+  CreateCustomerAssembler.cs       # Response mapping
+  CreateCustomerValidator.cs
+  CreateCustomerMessaging.cs       # this slice's Wolverine routing
+```
+
+The three layers a module does keep are dependency-ordered and enforced by architecture tests:
+`Features → Domain`, `Features → Persistence`, `Persistence → Domain`. **`Domain` depends on nothing.**
+
+### 3. Minimal APIs only
+
+No MVC controllers, no `[ApiController]`, no `IActionResult`. Every endpoint declares its operation id, a
+human-readable summary and its response contract, so the generated OpenAPI document is accurate rather
+than decorative.
+
+### 4. No repository pattern
+
+Feature handlers use the module `DbContext` directly — it *is* the unit of work. A repository layered
+over an ORM that already is one adds indirection without adding a boundary. The boundary that matters is
+the module, and it is enforced elsewhere.
+
+### 5. A rich domain, not an anemic one
+
+- Behaviour lives on aggregates, through intention-revealing methods that raise domain events.
+- Low-cardinality states are **value objects or SmartEnums**, never bare `string`/`int` —
+  `CustomerStatus` is a value object, `Currency` is an ISO 4217 SmartEnum.
+- Factories that validate input return `Result<T>`; they never throw for invalid input.
+- Aggregates derive from shared primitives (`AggregateRootWithPublicId<TId>`), so identity, public id and
+  domain events are not re-implemented per module.
+
+### 6. Dual identity: technical id inside, public id outside
+
+Every HTTP-exposed aggregate carries both a `StronglyTypedId` (internal, never serialised) and a
+`PublicId` (`cus_`, `ord_`, `prd_` + 32 hex). Clients only ever see the public one. This decouples the
+public contract from the storage strategy: identifiers can be rotated or hardened without breaking a
+single consumer.
+
+### 7. Manual mapping through assemblers — no AutoMapper
+
+Mapping is explicit, co-located with its slice, and **tested**. Convention-based mappers move breakage
+from compile time to runtime and hide contract drift; an assembler makes both visible. The same rule
+applies on the front end (`CustomerDetailMapper`, `CreateCustomerMapper`).
+
+Contracts must not leak persistence bookkeeping: no `CreatedAt`/`UpdatedAt` audit columns, no row
+versions, no soft-delete flags. A timestamp appears only when it is a genuine business concept
+(`OrderDate`).
+
+### 8. Reasonable messaging
+
+"Reasonable" means: asynchronous where it buys decoupling, explicit where it costs latency.
+
+| Need | Mechanism | Guarantee |
+|---|---|---|
+| Read another module's data | Request/reply over AMQP (`IMessageBus.InvokeAsync`) behind an anti-corruption port | Best effort, **graceful degradation** |
+| Publish a business fact | Transactional **outbox** (envelope committed with the business change) | At least once |
+| Consume a business fact | Durable **inbox** + scoped retry/dead-letter policy | At least once, poison messages quarantined |
+| React inside the module | Domain events dispatched by an EF `SaveChangesInterceptor` | At most once, in-process |
+
+Three rules keep this from turning into distributed spaghetti:
+
+- **M2M is AMQP, never HTTP.** A module reads another module's data only through that module's
+  `*.Contracts` message contract. HTTP is reserved for the outside world calling into the system.
+- **A read path serving an HTTP request has an explicit time budget**, named and unit-tested — never the
+  implicit product of a default timeout by a retry count (see `OrderHistoryRetryPolicy`: worst case
+  6.2 s, down from ~16 s).
+- **Degradation is a designed outcome, not a failure.** When the Order service is unreachable, the
+  customer is still returned with `ordersAvailable = false`, and the UI says exactly that.
+
+### 9. Front end and back end are decoupled
+
+- The front end is **the outside world**: it calls the system over HTTP, like any other client. The
+  "M2M = AMQP" rule does not apply to it.
+- It is a **BFF**: the Refit client and the facade run server-side, so the browser never learns an API
+  URL. Moving to WebAssembly would mean exposing the APIs to the browser (CORS, auth) — an architecture
+  decision, not a setting.
+- The UI holds **no business rules**. It orchestrates a facade per module and formats view models;
+  decisions stay in the domain.
+- The **render mode is chosen per screen** (static SSR for read screens, interactive only where an
+  interaction requires it), and that choice is justified by measurement.
+
+### 10. Contracts first, evolved additively
+
+Routes are versioned (`/api/v{version}`), evolution is additive, and a breaking change means a new
+version — never a silent mutation. Paginated endpoints return the shared `PagedResult<T>` envelope so the
+JSON shape never diverges between modules. Cross-module message contracts live in `*.Contracts`
+assemblies that depend on nothing but the framework and the shared kernel.
+
+### 11. Expected outcomes are results, not exceptions
+
+Validation failures, not-found, conflicts and domain-rule violations flow as `Result`/`Error` and are
+translated once into uniform RFC 7807 ProblemDetails. Exceptions are kept for the genuinely exceptional.
+The front end mirrors this: a `404`/`409` is **business data** turned into an explicit outcome, not a
+thrown exception.
+
+### 12. Observability ships with the feature
+
+Structured logs scoped by module/feature/correlation id, spans opened from the module's own
+`ActivitySource`, business metrics on the module's meter, trace context propagated across the broker so
+producer and consumer belong to one distributed trace, and health/readiness endpoints. A feature that
+cannot be diagnosed in production is not finished.
+
+### 13. Configuration and secret hygiene
+
+No connection string or credential in source code — not in runtime code, not in design-time factories.
+Everything resolves from configuration, fed by Aspire, environment variables or a secret store. Local
+fallbacks are password-less. Modules are gated by feature flags (`FeatureManagement:<Module>`), so a
+context can be switched off without a rebuild.
+
+### 14. Schema changes go through EF migrations
+
+Never hand-written SQL. And any column serving a paginated `ORDER BY` carries an index, declared in the
+entity configuration and shipped by a migration — the difference measured here at 200,000 rows was 41 ms
+per page (sort spilling to disk) against 0.12 ms.
+
+### 15. Guardrails, not discipline
+
+- **Architecture tests** (ArchUnitNET) enforce module and layer boundaries at build time.
+- **Model tests** pin what behaviour tests cannot see — an index is invisible until it is missing.
+- The **test pyramid** is layered by cost, and each level has an admission criterion (see [Tests](#tests)).
+
+### 16. Measure before optimising — and after
+
+Several decisions in this repository were **reversed by measurement**: an output cache that never served
+a hit, a 350 ms skeleton floor that cost 345 ms for nothing, a client timeout shorter than the backend
+degradation path it was meant to observe. The numbers are kept next to the decisions they justify, so a
+future change can re-run them rather than re-argue them.
+
+---
+
+## Topology
+
+The system is **distributed**: the *Customer* bounded context is extracted into its own service, which
+talks to the *Business* service (Order + Product) **only through RabbitMQ** (Wolverine request/reply).
+The services share **one PostgreSQL database** (`showroom`); isolation between modules comes from **a
+dedicated schema per module** (`customers`, `orders`, `products`) — logical separation, not physical. An
+extra `wolverine` schema hosts the transactional outbox **message store** (tables managed by Wolverine,
+next to the business schema — not a second DbContext).
+
+Two messaging styles coexist:
+- **synchronous request/reply** (`IMessageBus.InvokeAsync`) to read another module's data
+  (`GetOrdersForCustomer`) — no delivery guarantee, with graceful degradation;
+- **guaranteed publish/subscribe** through the **transactional outbox** for *IntegrationEvents*
+  (`CustomerRegisteredIntegrationEvent`) — at-least-once delivery, the envelope being persisted in the
+  **same transaction** as the business change (same DbContext, same connection) then delivered to
+  RabbitMQ with retries.
 
 ```mermaid
 flowchart LR
-    client([Client HTTP])
-    web["ShowRoom.Web<br/>(front Blazor — accueil)"]
+    client([HTTP client])
+    web["ShowRoom.Web<br/>(Blazor front end)"]
 
     subgraph customer[ShowRoom.Customer.Api]
-        cust[Module Customer]
+        cust[Customer module]
     end
     subgraph business[ShowRoom.Business.Api]
-        ord[Module Order]
-        prod[Module Product]
+        ord[Order module]
+        prod[Product module]
     end
 
     rabbit[[RabbitMQ<br/>messaging]]
-    db[("showroom<br/>(schémas: customers / orders / products / wolverine / wolverine_business)")]
+    db[("showroom<br/>(schemas: customers / orders / products / wolverine / wolverine_business)")]
 
     client -->|HTTP /customers| cust
     client -->|HTTP /orders, /products| ord
 
     web -->|HTTP /customers/{publicId}| cust
-    web -.->|HTTP (à venir)| ord
+    web -.->|HTTP (planned)| ord
 
     cust -->|"InvokeAsync(GetOrdersForCustomer)"| rabbit
     rabbit -->|GetOrdersForCustomer| ord
     ord -.->|OrdersForCustomerResponse| rabbit
     rabbit -.->|reply| cust
 
-    cust -->|"outbox: CustomerRegistered (livraison garantie)"| rabbit
+    cust -->|"outbox: CustomerRegistered (guaranteed delivery)"| rabbit
     rabbit -->|CustomerRegistered| ord
 
-    cust ---|schémas customers + wolverine| db
-    ord ---|schémas orders + wolverine_business| db
-    prod ---|schéma products| db
+    cust ---|schemas customers + wolverine| db
+    ord ---|schemas orders + wolverine_business| db
+    prod ---|schema products| db
 ```
 
-- **`ShowRoom.Customer.Api`** — héberge le module Customer. **Producteur** : `GET
-  /customers/{id}/with-orders` émet `GetOrdersForCustomer` sur le bus et attend la réponse ; `POST
-  /customers` publie `CustomerRegisteredIntegrationEvent` via l'**outbox transactionnel** (livraison
-  garantie).
-- **`ShowRoom.Business.Api`** — héberge Order + Product. **Consommateur** : répond à
-  `GetOrdersForCustomer` depuis sa base (sans jamais exposer d'appel HTTP interne) et **consomme**
-  `CustomerRegisteredIntegrationEvent` (inbox durable + politique retry/dead-letter, voir plus bas).
-- Comme le handler Order vit dans un **autre process**, la requête traverse réellement le broker →
-  trace distribuée complète et fiable, sans couplage HTTP entre services.
-- Dégradation gracieuse : si le service Order / le broker est indisponible, le client est tout de même
-  renvoyé avec `ordersAvailable = false` et une liste de commandes vide.
-- **`ShowRoom.Web`** — front Blazor (Server interactive) orchestré par Aspire. Il consomme le service
-  Customer en **HTTP** (client typé Refit) : le front est le monde extérieur qui appelle le système, le
-  HTTP y est donc légitime — la règle « M2M = AMQP » ne concerne que les échanges entre services. Voir
-  [Front Blazor](#front-blazor-showroomweb).
+- **`ShowRoom.Customer.Api`** — hosts the Customer module. **Producer**: `GET
+  /customers/{id}/with-orders` sends `GetOrdersForCustomer` on the bus and awaits the reply; `POST
+  /customers` publishes `CustomerRegisteredIntegrationEvent` through the **transactional outbox**
+  (guaranteed delivery).
+- **`ShowRoom.Business.Api`** — hosts Order + Product. **Consumer**: answers `GetOrdersForCustomer` from
+  its own database (never exposing an internal HTTP call) and **consumes**
+  `CustomerRegisteredIntegrationEvent` (durable inbox + retry/dead-letter policy, see below).
+- Because the Order handler lives in **another process**, the request genuinely crosses the broker →
+  a complete, trustworthy distributed trace, with no HTTP coupling between services.
+- Graceful degradation: if the Order service or the broker is unavailable, the customer is still returned
+  with `ordersAvailable = false` and an empty order list.
+- **`ShowRoom.Web`** — Blazor front end orchestrated by Aspire. It consumes the Customer service over
+  **HTTP** (typed Refit client): the front end is the outside world calling into the system, so HTTP is
+  legitimate there — the "M2M = AMQP" rule only governs service-to-service exchanges. See
+  [Blazor front end](#blazor-front-end-showroomweb).
 
 ---
 
-## Stack technique
+## Technical stack
 
-| Domaine | Choix |
+| Area | Choice |
 |---|---|
-| Runtime | .NET 10, C# / Minimal APIs (aucun MVC) |
-| Front | Blazor Web App (render mode Server interactif), design system « swiss » maison (CSS variables, aucun framework CSS) |
-| Client d'API front | **Refit** (interfaces typées) sur `IHttpClientFactory` — approche sélective : écrit à la main tant que la surface est étroite, générable par **Refitter** quand elle s'élargit |
+| Runtime | .NET 10, C# / Minimal APIs (no MVC) |
+| Front end | Blazor Web App (render mode chosen per screen), in-house "swiss" design system (CSS variables, no CSS framework) |
+| Front-end API client | **Refit** (typed interfaces) over `IHttpClientFactory` — selective approach: hand-written while the consumed surface is narrow, generated with **Refitter** when it widens |
 | Orchestration | .NET Aspire (AppHost + ServiceDefaults) |
-| Persistance | EF Core 10 + PostgreSQL (une base `showroom`, un schéma par module) |
-| Messaging M2M | RabbitMQ via **Wolverine** — request/reply (`IMessageBus.InvokeAsync`) + **outbox transactionnel** (producteur, DbContext unique) + **inbox durable & retry/dead-letter** (consommateur) ; message stores PostgreSQL par service (`wolverine`, `wolverine_business`) |
-| Observabilité | OpenTelemetry (traces + métriques, export OTLP), Serilog (logs structurés) |
-| Identifiants | `StronglyTypedId` (Meziantou) en interne, `PublicId` (`prefix_guid`) exposé en HTTP |
-| Résultats | `Result`/`Error` + `ErrorCategory` (SmartEnum) → ProblemDetails, plutôt que des exceptions |
-| Erreurs HTTP | RFC 7807 uniforme ; corps JSON malformé → `400` propre (`BadRequestExceptionHandler` + `UseExceptionHandler`), jamais de stack trace |
-| Validation | FluentValidation ; devise = `Currency` **SmartEnum** ISO 4217 (`Currency.IsValidCode` au boundary, `Currency.FromCode` au domaine) |
-| DI | Scrutor (scan des handlers) |
-| Versioning API | Asp.Versioning (`/api/v{version}`) |
+| Persistence | EF Core 10 + PostgreSQL (one `showroom` database, one schema per module) |
+| M2M messaging | RabbitMQ through **Wolverine** — request/reply (`IMessageBus.InvokeAsync`) + **transactional outbox** (producer, single DbContext) + **durable inbox & retry/dead-letter** (consumer); PostgreSQL message stores per service (`wolverine`, `wolverine_business`) |
+| Observability | OpenTelemetry (traces + metrics, OTLP export), Serilog (structured logs) |
+| Identifiers | `StronglyTypedId` (Meziantou) internally, `PublicId` (`prefix_guid`) exposed over HTTP |
+| Results | `Result`/`Error` + `ErrorCategory` (SmartEnum) → ProblemDetails, rather than exceptions |
+| HTTP errors | Uniform RFC 7807; a malformed JSON body yields a clean `400` (`BadRequestExceptionHandler` + `UseExceptionHandler`), never a stack trace |
+| Validation | FluentValidation; currency = `Currency` ISO 4217 **SmartEnum** (`Currency.IsValidCode` at the boundary, `Currency.FromCode` in the domain) |
+| DI | Scrutor (handler scanning) |
+| API versioning | Asp.Versioning (`/api/v{version}`) |
 | Feature flags | Microsoft.FeatureManagement (`FeatureManagement:<Module>`) |
-| Doc API | OpenAPI + Scalar (UI en développement) |
-| Tests | xUnit v3, Testcontainers (PostgreSQL / RabbitMQ), ArchUnitNET, AwesomeAssertions, Bogus |
+| API docs | OpenAPI + Scalar (UI in development) |
+| Tests | xUnit v3, **bUnit** (Blazor components), **Playwright** (browser journeys), Testcontainers (PostgreSQL / RabbitMQ), ArchUnitNET, AwesomeAssertions, Bogus |
 
 ---
 
-## Principes d'architecture
-
-Les règles complètes font foi dans [`.claude/rules/`](.claude/rules) ; en résumé :
-
-- **Bounded context isolé** par module (`Domain` pur ← `Persistence` ← `Features`), organisé en
-  **Vertical Slice + REPR** (Request · Endpoint · Handler · Response · Assembler).
-- **Pas de repository** : les handlers utilisent directement le `DbContext` du module (unité de
-  travail).
-- **M2M = AMQP, jamais HTTP** : un module lit les données d'un autre uniquement via son contrat de
-  message `*.Contracts` sur le bus. Le HTTP est réservé au monde extérieur qui appelle le système.
-- **Dual-ID** : `StronglyTypedId` technique interne + `PublicId` (préfixé, ex. `cus_`, `ord_`, `prd_`)
-  seul exposé en HTTP.
-- **Statuts** low-cardinality en ValueObject / SmartEnum, jamais en `string`/`int` bruts.
-- **Observabilité obligatoire** : logs structurés (`BeginModuleScope`), spans enrichis
-  (`SetCommonTags`), propagation du contexte de trace à travers le broker.
-- **Tests obligatoires** : endpoints + assembleurs prioritaires, tests d'architecture (ArchUnit)
-  gardiens des frontières.
-
----
-
-## Structure de la solution
+## Solution layout
 
 ```text
 Pops-ShowRoom.slnx
 ├─ src/
 │  ├─ aspire/
-│  │  ├─ ShowRoom.AppHost              # orchestration Aspire (services, PostgreSQL, RabbitMQ)
+│  │  ├─ ShowRoom.AppHost              # Aspire orchestration (services, PostgreSQL, RabbitMQ)
 │  │  └─ ShowRoom.ServiceDefaults      # OpenTelemetry, health checks, service discovery
 │  ├─ backends/
-│  │  ├─ ShowRoom.Customer.Api         # service Customer (producteur messaging)
-│  │  └─ ShowRoom.Business.Api         # service Order + Product (consommateur messaging)
+│  │  ├─ ShowRoom.Customer.Api         # Customer service (messaging producer)
+│  │  └─ ShowRoom.Business.Api         # Order + Product service (messaging consumer)
 │  ├─ frontends/
-│  │  └─ ShowRoom.Web                  # front Blazor (accueil + détail client, clients Refit)
+│  │  └─ ShowRoom.Web                  # Blazor front end (Refit clients, facade per module)
 │  ├─ modules/
-│  │  ├─ ShowRoom.Modules.Customer     # bounded context Customer
-│  │  ├─ ShowRoom.Modules.Order        # bounded context Order
-│  │  ├─ ShowRoom.Modules.Order.Contracts   # messages AMQP partagés (contrat inter-service)
-│  │  └─ ShowRoom.Modules.Product      # bounded context Product
-│  ├─ buildingblocks/ShowRoom.BuildingBlocks  # primitives DDD, Result, PublicId, observabilité, pagination
-│  └─ sharedkernel/ShowRoom.SharedKernel      # types partagés : VO (Email, PhoneNumber) + SmartEnum Currency (ISO 4217)
+│  │  ├─ ShowRoom.Modules.Customer     # Customer bounded context
+│  │  ├─ ShowRoom.Modules.Order        # Order bounded context
+│  │  ├─ ShowRoom.Modules.Order.Contracts   # shared AMQP messages (cross-service contract)
+│  │  └─ ShowRoom.Modules.Product      # Product bounded context
+│  ├─ buildingblocks/ShowRoom.BuildingBlocks  # DDD primitives, Result, PublicId, observability, pagination
+│  └─ sharedkernel/ShowRoom.SharedKernel      # shared types: value objects (Email, PhoneNumber) + Currency SmartEnum (ISO 4217)
 └─ tests/
-   ├─ ShowRoom.Testing                        # harnais d'intégration (Testcontainers, factory générique)
-   ├─ ShowRoom.Architecture.Tests             # tests de frontières (ArchUnitNET)
-   ├─ ShowRoom.Web.Tests                      # mapping + orchestration de la façade du front
+   ├─ ShowRoom.Testing                        # integration harness (Testcontainers, generic factory)
+   ├─ ShowRoom.Architecture.Tests             # boundary tests (ArchUnitNET)
+   ├─ ShowRoom.Web.Tests                      # front end: units + bUnit components
+   ├─ ShowRoom.Web.IntegrationTests           # front end: full chain over a disposable database
+   ├─ ShowRoom.Web.E2ETests                   # front end: browser journeys (Playwright)
    └─ ShowRoom.Modules.<Module>.Tests / .IntegrationTests
 ```
 
 ---
 
-## Démarrage
+## Getting started
 
-**Prérequis** : SDK .NET 10, Docker (PostgreSQL + RabbitMQ via Testcontainers/Aspire).
+**Prerequisites**: .NET 10 SDK, Docker (PostgreSQL + RabbitMQ through Testcontainers/Aspire).
 
 ```bash
 dotnet run --project src/aspire/ShowRoom.AppHost
 ```
 
-Aspire démarre PostgreSQL, RabbitMQ, les deux APIs et le front Blazor (`showroom-web`,
-`http://localhost:5206`), puis ouvre le **dashboard** (traces, métriques, logs, découverte des
-endpoints). Chaque service expose son UI **Scalar** (`/scalar`) en développement.
+Aspire starts PostgreSQL, RabbitMQ, both APIs and the Blazor front end (`showroom-web`,
+`http://localhost:5206`), then opens the **dashboard** (traces, metrics, logs, endpoint discovery). Each
+service exposes its **Scalar** UI (`/scalar`) in development.
 
-Le front seul (page d'accueil et écrans sans appel d'API ; les écrans consommant le service Customer
-attendent `http://localhost:5205`, port fixé par l'AppHost) :
+The front end alone (home page, plus the screens that make no API call; screens consuming the Customer
+service expect `http://localhost:5205`, the port pinned by the AppHost):
 
 ```bash
 dotnet run --project src/frontends/ShowRoom.Web
 ```
 
-> Astuce : pour observer la trace distribuée, appeler
-> `GET /api/v1/customers/{publicId}/with-orders` sur le service Customer — la trace unique traverse
-> Customer.Api → RabbitMQ → Business.Api dans le dashboard.
+> Tip: to watch the distributed trace, call `GET /api/v1/customers/{publicId}/with-orders` on the
+> Customer service — a single trace crosses Customer.Api → RabbitMQ → Business.Api in the dashboard.
 
 ---
 
-## APIs disponibles
+## Available APIs
 
-Toutes les routes sont versionnées sous `/api/v{version}` (v1 par défaut). Les ressources sont
-identifiées par leur **`PublicId`** (jamais l'identifiant technique).
+All routes are versioned under `/api/v{version}` (v1 by default). Resources are identified by their
+**`PublicId`** (never the technical identifier).
 
 ### ShowRoom.Customer.Api
 
-| Verbe | Route | Description | Réponses |
+| Verb | Route | Description | Responses |
 |---|---|---|---|
-| `POST` | `/api/v1/customers` | Crée un client | `201` + `PublicId` · `400` · `409` (email déjà utilisé) |
-| `GET` | `/api/v1/customers?page=&pageSize=&search=` | Liste paginée, filtre optionnel par nom | `200` · `400` |
-| `GET` | `/api/v1/customers/{publicId}` | Détail d'un client | `200` · `400` · `404` |
-| `GET` | `/api/v1/customers/{publicId}/with-orders` | Client + historique de commandes (récupéré via AMQP) | `200` (avec `ordersAvailable`) · `400` · `404` |
-| `PATCH` | `/api/v1/customers/{publicId}/email` | Change l'email d'un client (lève `CustomerEmailChanged`) | `204` · `400` · `404` · `409` (email déjà pris) |
-| `PUT` | `/api/v1/customers/{publicId}` | Met à jour le profil — **Style 1** task-based, events fins (`CustomerRenamed`/`…EmailChanged`/`…PhoneChanged`) | `204` · `400` · `404` · `409` |
-| `PUT` | `/api/v1/customers/{publicId}/profile` | Met à jour le profil — **Style 2** coarse, un seul `CustomerProfileUpdated` (+ `ChangedFields`) | `204` · `400` · `404` · `409` |
+| `POST` | `/api/v1/customers` | Creates a customer | `201` + `PublicId` · `400` · `409` (email already used) |
+| `GET` | `/api/v1/customers?page=&pageSize=&search=` | Paginated list, optional name filter | `200` · `400` |
+| `GET` | `/api/v1/customers/{publicId}` | Customer detail | `200` · `400` · `404` |
+| `GET` | `/api/v1/customers/{publicId}/with-orders` | Customer + order history (fetched over AMQP) | `200` (with `ordersAvailable`) · `400` · `404` |
+| `PATCH` | `/api/v1/customers/{publicId}/email` | Changes a customer's email (raises `CustomerEmailChanged`) | `204` · `400` · `404` · `409` (email taken) |
+| `PUT` | `/api/v1/customers/{publicId}` | Updates the profile — **Style 1** task-based, fine-grained events (`CustomerRenamed`/`…EmailChanged`/`…PhoneChanged`) | `204` · `400` · `404` · `409` |
+| `PUT` | `/api/v1/customers/{publicId}/profile` | Updates the profile — **Style 2** coarse, a single `CustomerProfileUpdated` (+ `ChangedFields`) | `204` · `400` · `404` · `409` |
 
 ### ShowRoom.Business.Api
 
 **Orders**
 
-| Verbe | Route | Description | Réponses |
+| Verb | Route | Description | Responses |
 |---|---|---|---|
-| `POST` | `/api/v1/orders` | Crée une commande (lignes produit) | `201` + `PublicId` · `400` |
-| `GET` | `/api/v1/orders/{publicId}` | Détail d'une commande + lignes | `200` · `400` · `404` |
-| `GET` | `/api/v1/orders?page=&pageSize=&customerPublicId=` | Liste paginée, filtre optionnel par client | `200` · `400` |
+| `POST` | `/api/v1/orders` | Creates an order (product lines) | `201` + `PublicId` · `400` |
+| `GET` | `/api/v1/orders/{publicId}` | Order detail + lines | `200` · `400` · `404` |
+| `GET` | `/api/v1/orders?page=&pageSize=&customerPublicId=` | Paginated list, optional customer filter | `200` · `400` |
 
 **Products**
 
-| Verbe | Route | Description | Réponses |
+| Verb | Route | Description | Responses |
 |---|---|---|---|
-| `POST` | `/api/v1/products` | Crée un produit | `201` + `PublicId` · `400` |
-| `GET` | `/api/v1/products/{publicId}` | Détail d'un produit | `200` · `400` · `404` |
-| `GET` | `/api/v1/products?page=&pageSize=&publicId=` | Liste paginée, filtre optionnel par public id | `200` · `400` |
+| `POST` | `/api/v1/products` | Creates a product | `201` + `PublicId` · `400` |
+| `GET` | `/api/v1/products/{publicId}` | Product detail | `200` · `400` · `404` |
+| `GET` | `/api/v1/products?page=&pageSize=&publicId=` | Paginated list, optional public id filter | `200` · `400` |
 
-**Communs aux deux services** : `GET /api/status`, `GET /health` (readiness), `GET /alive`
-(liveness), `/openapi` + `/scalar` (développement).
+**Common to both services**: `GET /api/status`, `GET /health` (readiness), `GET /alive` (liveness),
+`/openapi` + `/scalar` (development).
 
 ---
 
-## Front Blazor (ShowRoom.Web)
+## Blazor front end (ShowRoom.Web)
 
-`src/frontends/ShowRoom.Web` — **Blazor Web App** (.NET 10) en render mode **InteractiveServer**,
-orchestré par Aspire (`showroom-web`) et instrumenté comme les services (ServiceDefaults + Serilog →
-OTLP, `/health` et `/alive`).
+`src/frontends/ShowRoom.Web` — a **Blazor Web App** (.NET 10) orchestrated by Aspire (`showroom-web`)
+and instrumented like the services (ServiceDefaults + Serilog → OTLP, `/health` and `/alive`).
 
-**Écrans disponibles :**
+**Available screens:**
 
-| Route | Écran | API consommée |
+| Route | Screen | API consumed |
 |---|---|---|
-| `/` | Accueil — topologie (SVG), manifeste, piliers, modules | — |
-| `/customers?page=&search=` | Liste paginée + filtre par nom | `GET /api/v1/customers` |
-| `/customers/{publicId}` | Détail d'un client (fiche) | `GET /api/v1/customers/{publicId}` |
-| `/customers/{publicId}/orders` | Historique des commandes (agrégat cross-service) | `GET /api/v1/customers/{publicId}/with-orders` |
-| `/customers/new` | Création d'un client (formulaire) | `POST /api/v1/customers` |
+| `/` | Home — topology (SVG), manifesto, pillars, modules | — |
+| `/customers?page=&search=` | Paginated list + name filter | `GET /api/v1/customers` |
+| `/customers/{publicId}` | Customer detail | `GET /api/v1/customers/{publicId}` |
+| `/customers/{publicId}/orders` | Order history (cross-service aggregate) | `GET /api/v1/customers/{publicId}/with-orders` |
+| `/customers/new` | Customer creation (form) | `POST /api/v1/customers` |
 
-Les trois écrans du module couvrent la convention des **4 écrans de référence**
-([`frontend.md`](.claude/rules/frontend.md) §2.3) : consultation, création, groupement, navigation.
-L'état de la liste (page, recherche) vit dans la **query string** : l'écran reste partageable par URL
-et le bouton Retour du navigateur fonctionne.
+Together these screens cover the **4 reference screens** convention
+([`frontend.md`](.claude/rules/frontend.md) §2.3): consultation, creation, grouping, navigation. The list
+state (page, search) lives in the **query string**: the screen stays shareable by URL and the browser's
+Back button works.
 
-Structure (conforme à [`.claude/rules/frontend.md`](.claude/rules/frontend.md) §11) :
+Layout (following [`.claude/rules/frontend.md`](.claude/rules/frontend.md) §11):
 
 ```text
 src/frontends/ShowRoom.Web/
-├─ App/                            # coquille technique
-│  ├─ App.razor                    # document HTML racine
+├─ App/                            # technical shell
+│  ├─ App.razor                    # root HTML document
 │  ├─ Layout/                      # MainLayout (header/nav/footer, scroll-top), ReconnectModal
 │  └─ Routing/                     # Routes, Error, NotFound
 ├─ Features/
-│  ├─ Home/                        # page "/"
-│  └─ Customer/                    # module Customer
-│     ├─ CustomerFacade.cs         # LA porte d'entrée du module pour l'UI (+ ICustomerFacade)
-│     ├─ CustomerFormat.cs         # règles de présentation partagées par les écrans
-│     ├─ CustomerListResult.cs     # issue : Loaded / Unavailable
-│     ├─ CustomerLookupResult.cs   # issue : Found / InvalidPublicId / NotFound / Unavailable
-│     ├─ CustomerCreationResult.cs # issue : Created / EmailAlreadyUsed / Rejected / Unavailable
-│     ├─ CustomerList/             # écran : Page.razor, CustomerTable, CustomerListView,
-│     │                            #         CustomerListMapper
-│     ├─ CustomerDetail/           # écran : Page.razor, CustomerDetailCard,
+│  ├─ Home/                        # "/" page
+│  └─ Customer/                    # Customer module
+│     ├─ CustomerFacade.cs         # THE module's entry point for the UI (+ ICustomerFacade)
+│     ├─ CustomerFormat.cs         # presentation rules shared across screens
+│     ├─ CustomerListResult.cs     # outcome: Loaded / Unavailable
+│     ├─ CustomerLookupResult.cs   # outcome: Found / InvalidPublicId / NotFound / Unavailable
+│     ├─ CustomerCreationResult.cs # outcome: Created / EmailAlreadyUsed / Rejected / Unavailable
+│     ├─ CustomerList/             # screen: Page.razor, CustomerTable, CustomerTableSkeleton,
+│     │                            #         CustomerListView, CustomerListMapper
+│     ├─ CustomerDetail/           # screen: Page.razor, CustomerDetailCard, CustomerDetailSkeleton,
 │     │                            #         CustomerDetailView (view model), CustomerDetailMapper
-│     ├─ CustomerOrders/           # écran : Page.razor, CustomerOrderCard, CustomerOrdersView,
+│     ├─ CustomerOrders/           # screen: Page.razor, CustomerOrderCard, CustomerOrdersView,
 │     │                            #         CustomerOrdersMapper
-│     └─ CreateCustomer/           # écran : Page.razor, CreateCustomerForm (POCO),
+│     └─ CreateCustomer/           # screen: Page.razor, CreateCustomerForm (POCO),
 │                                  #         CreateCustomerFormValidator, CreateCustomerMapper
 ├─ Infrastructure/
 │  ├─ Api/
-│  │  ├─ BackendApiOptions.cs      # adresses des services (section "BackendApi")
+│  │  ├─ BackendApiOptions.cs      # service addresses ("BackendApi" section)
 │  │  ├─ RefitRegistration.cs      # AddRefitClient + RefitSettings (System.Text.Json)
 │  │  └─ Refit/
-│  │     ├─ Models/PagedResponse.cs # enveloppe de pagination partagée (tous modules)
-│  │     └─ Customer/              # ICustomerApi + Models/ (List + Get + Create)
-│  ├─ Validation/                  # FluentValidationValidator (branche FluentValidation sur EditForm)
-│  └─ PublicIds/PublicIdFormat.cs  # contrôle de format au boundary
-├─ customer.refitter               # config Refitter (génération optionnelle — voir plus bas)
+│  │     ├─ Models/PagedResponse.cs # shared pagination envelope (all modules)
+│  │     └─ Customer/              # ICustomerApi + Models/ (List + Get + WithOrders + Create)
+│  ├─ Validation/                  # FluentValidationValidator (plugs FluentValidation into EditForm)
+│  └─ PublicIds/PublicIdFormat.cs  # boundary format check
+├─ customer.refitter               # Refitter configuration (optional generation — see below)
 └─ wwwroot/
-   ├─ app.css                      # design system swiss (tokens CSS)
-   └─ App/Layout/scrollTop.js      # asset colocalisé du layout
+   ├─ app.css                      # swiss design system (CSS tokens)
+   └─ App/Layout/shell.js          # shell behaviour in plain JS (mobile menu, back to top)
 ```
 
-**Consommation d'API — Refit, en approche sélective.** Le front n'appelle jamais un `HttpClient` nu ni
-un client généré depuis un composant : il orchestre une **façade par module** (`ICustomerFacade`), qui
-appelle une **interface Refit** enregistrée sur `IHttpClientFactory` (donc bénéficiant du service
-discovery Aspire et du handler de résilience de ServiceDefaults). Les méthodes renvoient
-`ApiResponse<T>` : un `404`/`400`/`409` est une **donnée métier** traduite en issue explicite
-(`CustomerLookupOutcome`, `CustomerCreationOutcome`), pas une exception. Chaque état (chargement / vide
-/ invalide / introuvable / indisponible / succès) a sa branche dans la page.
+**API consumption — Refit, selectively.** The front end never calls a bare `HttpClient` nor a generated
+client from a component: it orchestrates a **facade per module** (`ICustomerFacade`), which calls a
+**Refit interface** registered on `IHttpClientFactory` (thus inheriting Aspire service discovery and the
+ServiceDefaults resilience handler). Methods return `ApiResponse<T>`: a `404`/`400`/`409` is **business
+data** translated into an explicit outcome (`CustomerLookupOutcome`, `CustomerCreationOutcome`), not an
+exception. Every state (loading / empty / invalid / not found / unavailable / success) has its own branch
+in the page.
 
-**Modèle d'hébergement et render modes.** `ShowRoom.Web` est une **Blazor Web App** (modèle unifié
-.NET 8+, un seul projet, `blazor.web.js`) — et non l'ancien template « ASP.NET Core hosted WebAssembly »
-(supprimé depuis .NET 8, remplacé par les render modes). Aucun WebAssembly n'est embarqué : le client
-Refit et la façade vivent côté serveur, donc le navigateur ignore l'existence des APIs (propriété
-**BFF**). Passer en `InteractiveWebAssembly` / `InteractiveAuto` exigerait un projet Client, l'exposition
-des APIs au navigateur (CORS + auth) et alourdirait le **premier** chargement — c'est un choix
-d'architecture, pas un réglage.
+**Hosting model and render modes.** `ShowRoom.Web` is a **Blazor Web App** (the unified .NET 8+ model,
+one project, `blazor.web.js`) — not the old "ASP.NET Core hosted WebAssembly" template (removed in
+.NET 8, replaced by render modes). No WebAssembly is shipped: the Refit client and the facade live
+server-side, so the browser never learns that the APIs exist (**BFF** property). Switching to
+`InteractiveWebAssembly` / `InteractiveAuto` would require a Client project, exposing the APIs to the
+browser (CORS + auth), and would make the **first** load heavier — an architecture decision, not a
+setting.
 
-Le render mode est décidé **par écran**, pas globalement :
+The render mode is decided **per screen**, not globally:
 
-| Écran | Render mode | Circuit SignalR |
+| Screen | Render mode | SignalR circuit |
 |---|---|---|
-| Accueil, liste, fiche, commandes | **SSR statique** + `[StreamRendering]` | **aucun** |
-| Création de client | `InteractiveServer` | oui (validation au fil de la saisie) |
+| Home, list, detail, orders | **Static SSR** + `[StreamRendering]` | **none** |
+| Customer creation | `InteractiveServer` | yes (validation while typing) |
 
-Vérifié sur le HTML servi : 0 marqueur de composant interactif sur les écrans de lecture, 1 sur
-`/customers/new`. Les interactions des écrans statiques passent par le web : **formulaire GET** pour le
-filtre, **liens** pour la pagination et les actions « Réessayer » — la navigation enrichie de
-`blazor.web.js` les rend sans rechargement complet, et les URLs restent partageables.
+Verified on the served HTML: 0 interactive-component markers on the read screens, 1 on `/customers/new`.
+Interactions on static screens go through the web: a **GET form** for the filter, **links** for
+pagination and "Retry" actions — enhanced navigation from `blazor.web.js` renders them without a full
+reload, and URLs stay shareable.
 
-La coquille (menu mobile, retour en haut) est pilotée par `wwwroot/App/Layout/shell.js` en **JS pur** :
-en faire des composants interactifs rouvrirait un circuit sur chaque page et annulerait le bénéfice du
-SSR statique.
+The shell (mobile menu, back-to-top) is driven by `wwwroot/App/Layout/shell.js` in **plain JS**: turning
+those into interactive components would reopen a circuit on every page and cancel the benefit of static
+SSR.
 
-**Streaming.** Les écrans de lecture déclarent `@attribute [StreamRendering]` : la coquille part dès le
-premier octet, les données sont diffusées dès que l'API répond, au lieu de retenir toute la réponse HTML.
-Mesuré sur l'écran des commandes, service Order arrêté (pire cas, 6,3 s de dégradation) :
+**Streaming.** Read screens declare `@attribute [StreamRendering]`: the shell leaves from the first byte
+and data is streamed as soon as the API answers, instead of holding back the whole HTML response.
+Measured on the orders screen with the Order service stopped (worst case, 6.3 s of degradation):
 
-| | TTFB | Réponse complète |
+| | TTFB | Full response |
 |---|---|---|
-| Sans streaming | **6,36 s** | 6,36 s |
-| Avec streaming | **0,03 s** | 6,32 s |
+| Without streaming | **6.36 s** | 6.36 s |
+| With streaming | **0.03 s** | 6.32 s |
 
-Soit un premier octet ~150× plus rapide, et un écran blanc de 6,4 s remplacé par la coquille + le
-squelette immédiats. Sur la liste (API à chaud) : TTFB 0,05 s, réponse complète 0,40 s.
+That is a ~150× faster first byte, and a 6.4 s blank screen replaced by an immediate shell + skeleton.
+On the list (warm API): TTFB 0.05 s, full response 0.40 s.
 
-**Compression et cache HTTP.** `UseResponseCompression` (Brotli + Gzip, niveau optimal) est activé sur
-les réponses dynamiques. Les assets statiques ne passent pas par là : `MapStaticAssets` les sert déjà
-**pré-compressés et empreintés** (vérifié : `app.css` renvoyé en `br`, 1 988 o, avec ETag).
+**Compression and HTTP caching.** `UseResponseCompression` (Brotli + Gzip, optimal level) is enabled for
+dynamic responses. Static assets do not go through it: `MapStaticAssets` already serves them
+**pre-compressed and fingerprinted** (verified: `app.css` returned as `br`, 1,988 bytes, with an ETag).
 
-| Page | Poids nu | Poids Brotli | Encodage |
+| Page | Raw size | Brotli size | Encoding |
 |---|---|---|---|
-| `/` | 17 967 o | **4 969 o** (−72 %) | `br` |
-| `/customers/new` | 8 742 o | **3 590 o** (−59 %) | `br` |
-| `/customers`, fiche, commandes | 21 575 o | 21 575 o | `identity` |
+| `/` | 17,967 B | **4,969 B** (−72%) | `br` |
+| `/customers/new` | 8,742 B | **3,590 B** (−59%) | `br` |
+| `/customers`, detail, orders | 21,575 B | 21,575 B | `identity` |
 
-> ⚠️ **Streaming et compression s'excluent.** Les trois écrans en `[StreamRendering]` sortent en
-> `Content-Encoding: identity` — un intermédiaire qui compresse pourrait tamponner la réponse et
-> détruire le streaming. Le compromis est assumé : sur le chemin dégradé de l'écran commandes, le
-> streaming ramène le TTFB de 6,36 s à 0,03 s, ce qu'aucune compression n'approche. TTFB vérifié
-> inchangé après activation (`/customers` : 0,05 s).
+> ⚠️ **Streaming and compression are mutually exclusive.** The three `[StreamRendering]` screens are
+> served as `Content-Encoding: identity` — a compressing intermediary could buffer the response and
+> destroy the streaming. The trade-off is deliberate: on the orders screen's degraded path, streaming
+> brings TTFB from 6.36 s down to 0.03 s, which no compression comes close to. TTFB verified unchanged
+> after enabling compression (`/customers`: 0.05 s).
 
-**Cache HTTP : volontairement aucun cache de sortie.** Décision mesurée, pas supposée :
-- les écrans clients portent l'en-tête **`no-store, no-cache, must-revalidate`** — une liste en cache
-  masquerait le client tout juste créé, et un « retour » sur un poste partagé rejouerait des données
-  personnelles ;
-- la page d'accueil, seule candidate, émet un **`Set-Cookie` antiforgery** comme toute réponse SSR Razor
-  Components. L'output cache refuse — à juste titre — de stocker une telle réponse : la forcer
-  distribuerait le jeton antiforgery d'un visiteur à tous les autres. Mesuré : 5 requêtes successives à
-  29–37 ms, sans aucun palier de cache. Gain écarté (~30 ms de rendu serveur) au regard du risque.
-  À reconsidérer seulement derrière un CDN/proxy qui retire le cookie.
+**HTTP caching: deliberately no output cache.** A measured decision, not an assumption:
+- customer screens carry **`no-store, no-cache, must-revalidate`** — a cached list would hide the
+  customer just created, and a "back" on a shared machine would replay personal data;
+- the home page, the only candidate, emits an **antiforgery `Set-Cookie`** like every Razor Components
+  SSR response. The output cache rightly refuses to store such a response, and forcing it would hand one
+  visitor's antiforgery token to every other visitor. Measured: 5 successive requests at 29–37 ms, with
+  no cache plateau whatsoever. The gain (~30 ms of server rendering) is not worth the risk. Revisit only
+  behind a CDN/proxy that strips the cookie.
 
-**Chargement.** La liste ne dit pas « Chargement… » : elle rend un **squelette** reproduisant le
-tableau réel (5 lignes), diffusé dès le premier octet grâce au streaming. La pagination reste rendue
-mais masquée en `visibility: hidden` : l'arrivée des données ne décale rien. Scintillement et fondu
-sont neutralisés sous `prefers-reduced-motion`.
+**Loading.** The list does not say "Loading…": it renders a **skeleton** mirroring the real table
+(5 rows), streamed from the first byte. Pagination stays rendered but hidden with `visibility: hidden`,
+so incoming data shifts nothing. Shimmer and fade are disabled under `prefers-reduced-motion`.
 
-Deux réglages ont été **retirés après mesure**, et c'est instructif :
+Two settings were **removed after measurement**, and the reasons are instructive:
 
-| Réglage retiré | Pourquoi |
+| Removed setting | Why |
 |---|---|
-| Plancher d'affichage de 350 ms | En SSR + streaming le squelette part dans le premier flush et le navigateur coalesce les peintures : rien ne clignote. Le plancher retardait la réponse complète de 345 ms (381 ms → 52 ms) sans rien apporter. |
-| Squelette calqué sur la page précédente | En SSR statique chaque requête instancie un composant neuf : un champ d'instance repart toujours de sa valeur par défaut. Le calquer sur `PageSize` alourdissait la réponse de 21,6 à 28,4 Ko, payés à chaque requête. |
+| 350 ms minimum skeleton display | Under SSR + streaming the skeleton ships in the first flush and the browser coalesces paints: nothing flickers. The floor delayed the full response by 345 ms (381 ms → 52 ms) for no benefit. |
+| Skeleton sized after the previous page | Under static SSR every request instantiates a fresh component: an instance field always starts from its default. Sizing it on `PageSize` grew the response from 21.6 KB to 28.4 KB, paid on every request. |
 
-Trois variantes ont été mesurées sur `/customers` avant d'arbitrer (médiane de 7 requêtes) :
+Three variants were measured on `/customers` before deciding (median of 7 requests):
 
-| Variante | TTFB | Réponse complète | Poids | Encodage |
+| Variant | TTFB | Full response | Size | Encoding |
 |---|---|---|---|---|
-| Streaming + plancher 350 ms | 19 ms | 381 ms | 21 575 o | `identity` |
-| **Streaming sans plancher** *(retenue)* | **38 ms** | **52 ms** | 21 575 o | `identity` |
-| Sans streaming (SSR simple) | 35 ms | 35 ms | **3 763 o** | `br` |
+| Streaming + 350 ms floor | 19 ms | 381 ms | 21,575 B | `identity` |
+| **Streaming without floor** *(chosen)* | **38 ms** | **52 ms** | 21,575 B | `identity` |
+| No streaming (plain SSR) | 35 ms | 35 ms | **3,763 B** | `br` |
 
-Le streaming ne gagne du temps que si l'API est lente — son TTFB reste constant quoi qu'il arrive,
-alors que celui du SSR simple suit la latence de l'API. Sur la liste (API à ~30 ms) les deux sont à
-égalité en temps, et le SSR simple est 5,7× plus léger ; le streaming est conservé pour garder un
-indicateur de chargement le jour où la liste ralentira, et par cohérence avec l'écran commandes où
-l'écart est décisif (TTFB 0,02 s contre 2 s de réponse complète mesurés en dégradé).
+Streaming only saves time when the API is slow — its TTFB stays constant regardless, while plain SSR's
+TTFB tracks API latency. On the list (API at ~30 ms) both tie on time and plain SSR is 5.7× lighter;
+streaming is kept to preserve a loading indicator for the day the list slows down, and for consistency
+with the orders screen where the gap is decisive (TTFB 0.02 s against a 2 s full response, measured while
+degraded).
 
-**Tenue en charge (mesurée à 200 026 clients).** Le front n'est pas le facteur limitant : la
-pagination borne la page à 20 lignes, donc son poids et son TTFB sont constants quel que soit le
-volume. Ce sont les requêtes SQL de la liste qui plafonnent.
+**Behaviour at scale (measured with 200,026 customers).** The front end is not the limiting factor:
+pagination caps the page at 20 rows, so its size and TTFB are constant whatever the volume. The list's
+SQL queries are what plateau.
 
-L'`ORDER BY "CreatedAt" DESC` de la liste n'avait aucun index : chaque page déclenchait un parcours
-séquentiel puis un tri complet **débordant sur disque** (`external merge Disk: 9864kB`). L'index
-`IX_customers_CreatedAt` (migration `AddCustomerCreatedAtIndex`) corrige ça :
+The list's `ORDER BY "CreatedAt" DESC` had no index: every page triggered a sequential scan then a full
+sort **spilling to disk** (`external merge Disk: 9864kB`). The `IX_customers_CreatedAt` index (migration
+`AddCustomerCreatedAtIndex`) fixes it:
 
-| | Sans index | Avec index |
+| | Without index | With index |
 |---|---|---|
-| SQL page 1 | 41 ms (`Seq Scan` + tri disque) | **0,12 ms** (`Index Scan`) |
-| API page 1 | 0,070 s | **0,032 s** |
-| API page 5000 | 0,112 s | **0,039 s** |
-| Front liste page 1 (TTFB / complet) | 0,032 / 0,071 s | **0,017 / 0,038 s** |
-| Front liste page 5000 | 0,030 / 0,107 s | **0,014 / 0,047 s** |
+| SQL page 1 | 41 ms (`Seq Scan` + disk sort) | **0.12 ms** (`Index Scan`) |
+| API page 1 | 0.070 s | **0.032 s** |
+| API page 5000 | 0.112 s | **0.039 s** |
+| Front list page 1 (TTFB / full) | 0.032 / 0.071 s | **0.017 / 0.038 s** |
+| Front list page 5000 | 0.030 / 0.107 s | **0.014 / 0.047 s** |
 
-Deux limites subsistent, connues et non corrigées à ce stade :
+Two limits remain, known and not addressed at this stage:
 
-1. **`OFFSET` profond** — même avec l'index, la page 5000 parcourt 100 020 entrées d'index. Seule une
-   pagination *keyset* (`WHERE "CreatedAt" < @dernier`) rend le coût indépendant de la profondeur.
-2. **Recherche `ILIKE '%…%'`** — non indexable en b-tree, `Seq Scan` intégral (~148 ms à 200 k). Un
-   index **GIN + pg_trgm** est la réponse.
+1. **Deep `OFFSET`** — even with the index, page 5000 walks 100,020 index entries. Only *keyset*
+   pagination (`WHERE "CreatedAt" < @last`) makes the cost independent of depth.
+2. **`ILIKE '%…%'` search** — not indexable by a b-tree, full `Seq Scan` (~148 ms at 200 k). A **GIN +
+   pg_trgm** index is the answer.
 
-Le `COUNT(*)` de chaque page reste modeste (~35 ms à 200 k) ; au-delà du million de lignes il faudrait
-un compte approché ou mis en cache. Le design du front — streaming + squelette — est celui qui encaisse
-le mieux ces dégradations : son TTFB reste stable quelle que soit la lenteur de la requête.
+The per-page `COUNT(*)` stays modest (~35 ms at 200 k); beyond a million rows it would need an
+approximate or cached count. The front-end design — streaming + skeleton — is precisely the one that
+absorbs these degradations best: its TTFB stays stable however slow the query gets.
 
-**Dégradation cross-service, visible à l'écran.** `/customers/{publicId}/orders` consomme l'endpoint
-agrégeant `with-orders` : le service Customer y récupère l'historique auprès du service Order **via
-AMQP**. Quand ce saut échoue, le backend répond `200` avec `ordersAvailable = false` (dégradation
-gracieuse) — un **succès partiel** que l'écran affiche comme tel : identité du client conservée,
-bannière `role="status"` expliquant que seules les commandes manquent, bouton Réessayer. Ce n'est ni
-une erreur, ni un « client sans commande ».
+**Cross-service degradation, visible on screen.** `/customers/{publicId}/orders` consumes the aggregating
+`with-orders` endpoint: the Customer service fetches the history from the Order service **over AMQP**.
+When that hop fails, the backend answers `200` with `ordersAvailable = false` (graceful degradation) — a
+**partial success** the screen renders as such: customer identity preserved, a `role="status"` banner
+explaining that only the orders are missing, and a Retry action. It is neither an error nor a "customer
+with no orders".
 
-> ⚠️ **Budget de temps du client HTTP.** Ce chemin de dégradation ne répond qu'une fois le budget de
-> retries du backend épuisé (**6,3 s** mesurées — voir `OrderHistoryRetryPolicy` dans
-> [Messaging](#messaging--observabilité)). Le handler de résilience par défaut de ServiceDefaults coupe
-> à **10 s par tentative**, ce qui était plus court que le budget backend d'origine (~16 s) : il tuait
-> l'appel avant la réponse dégradée et transformait un succès partiel explicable en « service
-> indisponible ». Le client `ICustomerApi` remplace donc ce pipeline (`RemoveAllResilienceHandlers` +
-> `AddStandardResilienceHandler`, **12 s par tentative**, 1 retry) — voir `RefitRegistration.cs`. Les
-> deux budgets sont **couplés** : toute API agrégeant d'autres services impose la même règle — le
-> budget du client doit dépasser le pire chemin de dégradation qu'il veut observer, et être resserré
-> quand celui-ci l'est.
+> ⚠️ **HTTP client time budget.** This degradation path only answers once the backend's retry budget is
+> spent (**6.3 s** measured — see `OrderHistoryRetryPolicy` under [Messaging](#messaging--observability)).
+> The default ServiceDefaults resilience handler cuts at **10 s per attempt**, which was shorter than the
+> original backend budget (~16 s): it killed the call before the degraded answer and turned an
+> explainable partial success into "service unavailable". The `ICustomerApi` client therefore replaces
+> that pipeline (`RemoveAllResilienceHandlers` + `AddStandardResilienceHandler`, **12 s per attempt**,
+> 1 retry) — see `RefitRegistration.cs`. The two budgets are **coupled**: any API aggregating other
+> services imposes the same rule — the client budget must outlast the slowest degradation path it wants
+> to observe, and must be tightened when that path is.
 
-**Formulaires.** Validation **FluentValidation** uniquement (jamais DataAnnotations) : un modèle POCO,
-un `AbstractValidator<T>` séparé aux messages français, branchés sur l'`EditForm` par le composant
-`Infrastructure/Validation/FluentValidationValidator`. Il valide tout le modèle à la soumission mais ne
-remplace que les messages du champ modifié lors d'une saisie — un champ non encore rempli ne s'affiche
-pas en erreur prématurément. Les règles client reproduisent les contraintes du backend, qui reste
-l'autorité : un email en doublon n'est détectable que côté serveur (409 → message dédié, l'utilisateur
-reste sur le formulaire ; succès → redirection vers la fiche créée).
+**Forms.** Validation is **FluentValidation** only (never DataAnnotations): a POCO model, a separate
+`AbstractValidator<T>` with French end-user messages, plugged into the `EditForm` by the
+`Infrastructure/Validation/FluentValidationValidator` component. It validates the whole model on submit
+but replaces only the touched field's messages while typing — a field the user has not filled in yet
+never shows an error prematurely. Client rules mirror the backend constraints, and the backend remains
+the authority: a duplicate email can only be detected server-side (409 → dedicated message, the user
+stays on the form; success → redirect to the created customer).
 
-**Génération avec Refitter (optionnelle).** Tant que la surface consommée reste étroite, l'interface est
-écrite à la main (`ICustomerApi` : une méthode). Quand elle s'élargit, `customer.refitter` permet de la
-régénérer depuis l'OpenAPI du service — sans rien changer aux appelants, la façade étant la seule
-frontière :
+**Generation with Refitter (optional).** While the consumed surface stays narrow, the interface is
+hand-written. When it widens, `customer.refitter` regenerates it from the service's OpenAPI document —
+without touching any caller, the facade being the only boundary:
 
 ```bash
 dotnet tool install --global refitter
 ```
 
-Puis, **le service Customer étant démarré** (l'`openApiPath` pointe sur son document `/openapi/v1.json`) :
+Then, **with the Customer service running** (`openApiPath` points at its `/openapi/v1.json` document):
 
 ```bash
 refitter --settings-file src/frontends/ShowRoom.Web/customer.refitter
 ```
 
-Le fichier de configuration est fourni comme point de départ mais **n'a pas encore été exécuté** :
-vérifier le nom d'interface généré (`multipleInterfaces: ByTag` le dérive du tag OpenAPI) avant de
-remplacer l'interface écrite à la main.
+The configuration file is provided as a starting point but **has not been executed yet**: check the
+generated interface name (`multipleInterfaces: ByTag` derives it from the OpenAPI tag) before replacing
+the hand-written interface.
 
-**Design system « swiss »** : Helvetica Neue, grille d'espacement en multiples de 8 px, aplats et
-filets 1 px, libellés capitales espacées, aucun framework CSS. Les tokens (`--color-*`, `--space-*`,
-`--font-size-*`, `--transition-*`) sont définis une seule fois dans `wwwroot/app.css` ; chaque page
-n'écrit que son propre `*.razor.css` **scopé** et ne consomme que ces variables. Mobile-first :
-breakpoints `1024px` / `768px`, cibles tactiles ≥ 44 px, aucun débordement horizontal.
+**"Swiss" design system**: Helvetica Neue, an 8 px spacing scale, flat areas and 1 px rules, spaced
+uppercase labels, no CSS framework. Tokens (`--color-*`, `--space-*`, `--font-size-*`, `--transition-*`)
+are defined once in `wwwroot/app.css`; each page writes only its own **scoped** `*.razor.css` and
+consumes those variables. Mobile-first: breakpoints at `1024px` / `768px`, touch targets ≥ 44 px, no
+horizontal overflow.
 
 ---
 
-## Messaging & observabilité
+## Messaging & observability
 
-- **Contrat** : `ShowRoom.Modules.Order.Contracts` — messages `GetOrdersForCustomer` /
-  `OrdersForCustomerResponse`, records purs sans dépendance d'implémentation.
-- **Producteur** (Customer.Api) : `IMessageBus.InvokeAsync<OrdersForCustomerResponse>` derrière un
-  port anti-corruption (`IOrderHistory`), avec dégradation gracieuse et **retry borné sur cold-start**
-  (le tout premier message provisionne connexion + reply-queue ; les tentatives suivantes tombent sur
-  un chemin chaud, et la lecture étant idempotente le retry est sûr).
-- **Budget de temps de ce chemin de lecture** — `OrderHistoryRetryPolicy` (slice
-  `Features/GetCustomerWithOrders/`). Cette lecture sert une requête HTTP : son pire cas est de la
-  latence vue par l'utilisateur, donc les délais sont **explicites par tentative** au lieu d'hériter du
-  timeout Wolverine de 5 s :
+- **Contract**: `ShowRoom.Modules.Order.Contracts` — `GetOrdersForCustomer` /
+  `OrdersForCustomerResponse` messages, pure records with no implementation dependency.
+- **Producer** (Customer.Api): `IMessageBus.InvokeAsync<OrdersForCustomerResponse>` behind an
+  anti-corruption port (`IOrderHistory`), with graceful degradation and a **bounded cold-start retry**
+  (the very first message provisions the connection + reply queue; later attempts hit a warm path, and
+  since the read is idempotent the retry is safe).
+- **Time budget of that read path** — `OrderHistoryRetryPolicy` (slice `Features/GetCustomerWithOrders/`).
+  This read serves an HTTP request: its worst case is user-visible latency, so deadlines are **explicit
+  per attempt** instead of inheriting Wolverine's 5 s timeout:
 
-  | | Délai | Rôle |
+  | | Deadline | Role |
   |---|---|---|
-  | Tentative 1 | 2 s | chemin chaud (répond en ms) — échoue vite |
+  | Attempt 1 | 2 s | warm path (answers in ms) — fails fast |
   | Backoff | 200 ms | |
-  | Tentative 2 | 4 s | absorbe le provisioning du cold-start |
-  | **Pire cas** | **6,2 s** | avant la réponse dégradée (`ordersAvailable = false`) |
+  | Attempt 2 | 4 s | absorbs cold-start provisioning |
+  | **Worst case** | **6.2 s** | before the degraded answer (`ordersAvailable = false`) |
 
-  Mesures : cold-start **2,9 s** avec historique complet (la 2ᵉ tentative réussit), chemin chaud
-  **0,07 s**, dégradé **6,3 s** (contre ~16 s avec l'ancien budget de 3 × 5 s). Un test unitaire
-  (`OrderHistoryRetryPolicyTests`) verrouille ce plafond.
-- **Consommateur** (Business.Api) : handler Wolverine écoutant la file RabbitMQ, répondant depuis
+  Measurements: cold start **2.9 s** with a complete history (the 2nd attempt succeeds), warm path
+  **0.07 s**, degraded **6.3 s** (against ~16 s with the previous 3 × 5 s budget). A unit test
+  (`OrderHistoryRetryPolicyTests`) pins that ceiling.
+- **Consumer** (Business.Api): a Wolverine handler listening on the RabbitMQ queue, answering from
   `OrdersContext`.
-- **Traces** : sources OpenTelemetry `Wolverine` + `RabbitMQ.Client.*` enregistrées ; Wolverine
-  propage le contexte de trace W3C à travers le broker → une seule trace distribuée
-  producteur → broker → consommateur → réponse. Chaque élément (HTTP → send → publish → deliver →
-  handle → handler métier → **requêtes SQL** via l'instrumentation Npgsql) est un span avec sa
-  **durée**. Métriques Wolverine (`Wolverine*`), runtime, ASP.NET Core et **Npgsql** (pool/commandes)
-  exportées.
-- **Logs** : Serilog structuré, enrichi `[Module] [Feature] [RequestId]`, `RequestId` dérivé du
-  `TraceId` pour corréler logs et traces des deux services.
+- **Traces**: `Wolverine` + `RabbitMQ.Client.*` OpenTelemetry sources registered; Wolverine propagates
+  the W3C trace context across the broker → a single distributed trace producer → broker → consumer →
+  reply. Every element (HTTP → send → publish → deliver → handle → business handler → **SQL queries** via
+  Npgsql instrumentation) is a span with its **duration**. Wolverine (`Wolverine*`), runtime, ASP.NET
+  Core and **Npgsql** (pool/commands) metrics are exported.
+- **Logs**: structured Serilog, enriched with `[Module] [Feature] [RequestId]`, `RequestId` derived from
+  the `TraceId` so logs and traces correlate across both services.
 
-### Outbox transactionnel (livraison garantie des IntegrationEvents)
+### Transactional outbox (guaranteed IntegrationEvent delivery)
 
-Là où `GetOrdersForCustomer` est une **lecture** best-effort (request/reply, dégradation gracieuse),
-un *IntegrationEvent* comme `CustomerRegisteredIntegrationEvent` exige une **livraison au moins une
-fois** entre services. ShowRoom l'assure avec l'**outbox transactionnel Wolverine**, sans mélanger les
-genres — **un seul DbContext**, la séparation se faisant au niveau du **schéma** :
+Where `GetOrdersForCustomer` is a best-effort **read** (request/reply, graceful degradation), an
+*IntegrationEvent* such as `CustomerRegisteredIntegrationEvent` demands **at-least-once delivery**
+between services. ShowRoom guarantees it with Wolverine's **transactional outbox**, without mixing
+concerns — **a single DbContext**, separation happening at the **schema** level:
 
-- **DbContext unique + schéma dédié** — `CustomersContext` porte le métier (schéma `customers`) ; les
-  tables d'enveloppes Wolverine vivent dans le schéma `wolverine` de la **même** base. L'atomicité vient
-  de là : l'outbox écrit l'enveloppe **via la connexion du DbContext**, donc dans la même transaction.
-  Le message store (`PersistMessagesWithPostgresql(showroom, "wolverine")`) est configuré une seule fois
-  dans `ConfigureShowRoomMessaging`, piloté par `Messaging:UseTransactionalOutbox` ; ses tables sont
-  auto-provisionnées, **hors migrations** du module.
-- **Publication atomique** — le handler `CreateCustomer` injecte `IDbContextOutbox<CustomersContext>`,
-  travaille sur `outbox.DbContext`, publie l'événement, puis `SaveChangesAndFlushMessagesAsync()` :
-  l'insert du client **et** l'enveloppe sont écrits dans **une seule transaction** (tout ou rien).
-- **Livraison durable** — le point d'envoi RabbitMQ est déclaré `UseDurableOutbox()` : un agent Wolverine
-  rejoue l'enveloppe jusqu'à acquittement, survivant aux crashes du process et aux coupures du broker.
-- **Tests sans broker** — les tests d'intégration désactivent les transports externes
-  (`DisableAllExternalWolverineTransports`) et nettoient le stockage Wolverine
-  (`ClearAllWolverineStorageAsync`) ; `CreateCustomerOutboxTests` utilise le *message tracking* Wolverine
-  (`TrackActivity().ExecuteAndWaitAsync(...)`) pour affirmer que l'événement est bien émis par l'outbox —
-  sans RabbitMQ réel.
+- **Single DbContext + dedicated schema** — `CustomersContext` carries the business tables (schema
+  `customers`); Wolverine's envelope tables live in the `wolverine` schema of the **same** database.
+  Atomicity comes from exactly that: the outbox writes the envelope **through the DbContext's own
+  connection**, hence in the same transaction. The message store
+  (`PersistMessagesWithPostgresql(showroom, "wolverine")`) is configured once in
+  `ConfigureShowRoomMessaging`, driven by `Messaging:UseTransactionalOutbox`; its tables are
+  auto-provisioned, **outside** the module's migrations.
+- **Atomic publication** — the `CreateCustomer` handler injects `IDbContextOutbox<CustomersContext>`,
+  works on `outbox.DbContext`, publishes the event, then calls `SaveChangesAndFlushMessagesAsync()`: the
+  customer insert **and** the envelope are written in **one transaction** (all or nothing).
+- **Durable delivery** — the RabbitMQ sending endpoint declares `UseDurableOutbox()`: a Wolverine agent
+  replays the envelope until acknowledged, surviving process crashes and broker outages.
+- **Broker-free tests** — integration tests disable external transports
+  (`DisableAllExternalWolverineTransports`) and clear Wolverine storage
+  (`ClearAllWolverineStorageAsync`); `CreateCustomerOutboxTests` uses Wolverine message tracking
+  (`TrackActivity().ExecuteAndWaitAsync(...)`) to assert the event is emitted by the outbox — with no
+  real RabbitMQ.
 
-**Consommateur + retry / dead-letter (Business.Api).** Le module Order consomme
-`CustomerRegisteredIntegrationEvent` (slice `Features/OnCustomerRegistered`) :
+**Consumer + retry / dead-letter (Business.Api).** The Order module consumes
+`CustomerRegisteredIntegrationEvent` (slice `Features/OnCustomerRegistered`):
 
-- **Inbox durable** — `ListenToRabbitQueue(...).UseDurableInbox()` ; Business.Api a **son propre** message
-  store (`Messaging:UsePersistentMessageStore`, schéma **`wolverine_business`** — un runtime Wolverine ne
-  partage jamais le store d'un autre service).
-- **Politique retry/dead-letter** — un message *poison* (non traitable, ici sans `PublicId`) lève
-  `UnprocessableCustomerRegisteredException` ; la politique le rejoue quelques fois avec cooldown puis le
-  déplace en **dead-letter** (`wolverine_business.wolverine_dead_letters`) plutôt que de le rejouer
-  indéfiniment. Elle est **scopée par type d'exception**, donc le request/reply `GetOrdersForCustomer`
-  n'est pas affecté.
-- **Preuve E2E** — `CustomerRegisteredConsumerE2ETests` (PostgreSQL + RabbitMQ Testcontainers, broker
-  réel) : un message bien formé est traité (`MessageSucceeded`), un message poison finit en dead-letter
+- **Durable inbox** — `ListenToRabbitQueue(...).UseDurableInbox()`; Business.Api has **its own** message
+  store (`Messaging:UsePersistentMessageStore`, schema **`wolverine_business`** — one Wolverine runtime
+  never shares another service's store).
+- **Retry/dead-letter policy** — a *poison* message (unprocessable, here missing its `PublicId`) raises
+  `UnprocessableCustomerRegisteredException`; the policy replays it a few times with a cooldown then
+  moves it to the **dead-letter** table (`wolverine_business.wolverine_dead_letters`) rather than
+  replaying it forever. It is **scoped by exception type**, so the `GetOrdersForCustomer` request/reply
+  is unaffected.
+- **End-to-end proof** — `CustomerRegisteredConsumerE2ETests` (PostgreSQL + RabbitMQ Testcontainers, real
+  broker): a well-formed message is handled (`MessageSucceeded`), a poison message ends up dead-lettered
   (`MovedToErrorQueue`).
 
-> Domain events (in-process, at-most-once) vs Integration events (cross-service, at-least-once) : les
-> premiers passent par un `SaveChangesInterceptor` best-effort, les seconds par cet outbox durable.
+> Domain events (in-process, at-most-once) versus integration events (cross-service, at-least-once): the
+> former go through a best-effort `SaveChangesInterceptor`, the latter through this durable outbox.
 
-### Métriques messaging (`MessagingMetrics`) — prêtes pour un board
+### Messaging metrics (`MessagingMetrics`) — board-ready
 
-Meter dédié **`ShowRoom.Messaging`** (enregistré via `AddMeter` dans les deux hosts), en complément —
-jamais en remplacement — des spans et des métriques Wolverine. Deux histogrammes de durée (`ms`) :
+A dedicated **`ShowRoom.Messaging`** meter (registered with `AddMeter` in both hosts), complementing —
+never replacing — spans and Wolverine's own metrics. Two duration histograms (`ms`) plus a counter:
 
-| Instrument (OTel) | Type · unité | Enregistré par | Mesure |
+| Instrument (OTel) | Type · unit | Recorded by | Measures |
 |---|---|---|---|
-| `showroom.messaging.roundtrip.duration` | Histogram · `ms` | Producteur (Customer.Api, port `IOrderHistory`) | round-trip complet perçu par l'appelant : produce → réponse reçue (broker + réseau + traitement) |
-| `showroom.messaging.handler.duration` | Histogram · `ms` | Consommateur (Business.Api, handler AMQP) | temps de traitement du message : dequeue → réponse produite |
-| `showroom.messaging.retries` | Counter · `{retry}` | Producteur (Customer.Api, port) | nombre de retries request/reply (cold-start / timeouts retentés) |
+| `showroom.messaging.roundtrip.duration` | Histogram · `ms` | Producer (Customer.Api, `IOrderHistory` port) | full round-trip as the caller perceives it: produce → reply received (broker + network + handling) |
+| `showroom.messaging.handler.duration` | Histogram · `ms` | Consumer (Business.Api, AMQP handler) | message handling time: dequeue → reply produced |
+| `showroom.messaging.retries` | Counter · `{retry}` | Producer (Customer.Api, port) | number of request/reply retries (cold start / retried timeouts) |
 
-**Tags** (pour `group by` / filtres dans le board) :
+**Tags** (for `group by` / filters on the board):
 
-| Tag | Valeurs | Sur |
+| Tag | Values | On |
 |---|---|---|
 | `messaging.module` | `Customer`, `Order` | roundtrip · handler · retries |
 | `messaging.feature` | `GetCustomerWithOrders`, `GetOrdersForCustomer` | roundtrip · handler · retries |
 | `messaging.message` | `GetOrdersForCustomer` | roundtrip · retries |
 | `messaging.outcome` | `success`, `failure`, `invalid_request` | roundtrip · handler |
 
-**Panneaux type** (histogrammes OTel → en Prometheus, `.` devient `_` et l'unité est suffixée, d'où
-`showroom_messaging_roundtrip_duration_milliseconds_*`) :
+**Typical panels** (OTel histograms → in Prometheus, `.` becomes `_` and the unit is suffixed, hence
+`showroom_messaging_roundtrip_duration_milliseconds_*`):
 
 ```promql
-# Latence round-trip p95 (par feature)
+# p95 round-trip latency (per feature)
 histogram_quantile(0.95, sum by (le, messaging_feature) (
   rate(showroom_messaging_roundtrip_duration_milliseconds_bucket[5m])))
 
-# Latence de transport pure ≈ round-trip − handler (p95), isole le coût AMQP du traitement métier
+# Pure transport latency ≈ round-trip − handler (p95), isolates the AMQP cost from business handling
 histogram_quantile(0.95, sum by (le) (rate(showroom_messaging_roundtrip_duration_milliseconds_bucket[5m])))
 - histogram_quantile(0.95, sum by (le) (rate(showroom_messaging_handler_duration_milliseconds_bucket[5m])))
 
-# Taux d'échec du round-trip (dégradations / timeouts non récupérés)
+# Round-trip failure rate (degradations / unrecovered timeouts)
 sum(rate(showroom_messaging_roundtrip_duration_milliseconds_count{messaging_outcome!="success"}[5m]))
 / sum(rate(showroom_messaging_roundtrip_duration_milliseconds_count[5m]))
 ```
 
-Dans le **dashboard Aspire** (dev) : onglet *Metrics* → ressource → meter `ShowRoom.Messaging` ; les
-durées sont aussi posées en tags de span (`customer.orders.roundtrip_ms`, `messaging.handler.duration_ms`)
-visibles dans l'onglet *Traces*.
+In the **Aspire dashboard** (dev): *Metrics* tab → resource → `ShowRoom.Messaging` meter; the durations
+are also set as span tags (`customer.orders.roundtrip_ms`, `messaging.handler.duration_ms`), visible in
+the *Traces* tab.
 
-**Dashboard Grafana prêt à l'emploi** : [`docs/observability/showroom-messaging.grafana.json`](docs/observability/showroom-messaging.grafana.json)
-— importable tel quel (Grafana → *Import* → choisir la datasource Prometheus). Panneaux : round-trip
-p50/p95/p99, handler p50/p95/p99, latence de transport (round-trip − handler), débit par `outcome`,
-taux d'échec, round-trip p95 par feature, **retries (cold-start)** ; variable `feature` pour filtrer.
+**Ready-made Grafana dashboard**: [`docs/observability/showroom-messaging.grafana.json`](docs/observability/showroom-messaging.grafana.json)
+— importable as is (Grafana → *Import* → pick the Prometheus datasource). Panels: round-trip p50/p95/p99,
+handler p50/p95/p99, transport latency (round-trip − handler), throughput by `outcome`, failure rate,
+p95 round-trip per feature, **retries (cold start)**; a `feature` variable to filter.
 
-### Métriques métier (Orders)
+### Business metrics (Orders)
 
-KPIs domaine (pas des timings d'infra), émis sur le **Meter de chaque module** (`ShowRoom.Modules.<Module>`,
-enregistré via `AddMeter(<Module>.TelemetrySourceName)`), depuis les handlers `Create*` — pattern : Meter
-de module + helper `*Metrics` co-localisé dans le slice.
+Domain KPIs (not infrastructure timings), emitted on **each module's meter**
+(`ShowRoom.Modules.<Module>`, registered with `AddMeter(<Module>.TelemetrySourceName)`), from the
+`Create*` handlers — pattern: module meter + a `*Metrics` helper co-located in the slice.
 
-| Instrument (OTel) | Module | Type | Tags | Mesure |
+| Instrument (OTel) | Module | Type | Tags | Measures |
 |---|---|---|---|---|
-| `showroom.orders.created` | Order | Counter · `{order}` | `order.currency` | commandes créées (taux = commandes/s) |
-| `showroom.orders.amount` | Order | Histogram | `order.currency` | total d'une commande ; `sum/count` = **panier moyen** (€), buckets = distribution |
-| `showroom.orders.items` | Order | Histogram · `{item}` | — | nb d'articles/commande ; `sum/count` = **panier moyen en articles** |
-| `showroom.customers.registered` | Customer | Counter · `{customer}` | — | clients inscrits (**acquisition**) |
-| `showroom.<entity>.create.rejected` | Order · Product · Customer | Counter · `{rejection}` | `reason` (`validation`/`domain`/`conflict`) | créations **rejetées** — qualité du funnel |
+| `showroom.orders.created` | Order | Counter · `{order}` | `order.currency` | orders created (rate = orders/s) |
+| `showroom.orders.amount` | Order | Histogram | `order.currency` | order total; `sum/count` = **average basket** (€), buckets = distribution |
+| `showroom.orders.items` | Order | Histogram · `{item}` | — | items per order; `sum/count` = **average basket in items** |
+| `showroom.customers.registered` | Customer | Counter · `{customer}` | — | registered customers (**acquisition**) |
+| `showroom.<entity>.create.rejected` | Order · Product · Customer | Counter · `{rejection}` | `reason` (`validation`/`domain`/`conflict`) | **rejected** creations — funnel quality |
 
 ```promql
-# Panier moyen (€) par devise
+# Average basket (€) per currency
 sum by (order_currency) (rate(showroom_orders_amount_sum[$__rate_interval]))
 / sum by (order_currency) (rate(showroom_orders_amount_count[$__rate_interval]))
 
-# Panier moyen en articles
+# Average basket in items
 sum(rate(showroom_orders_items_sum[$__rate_interval])) / sum(rate(showroom_orders_items_count[$__rate_interval]))
 
-# Clients inscrits / minute
+# Customers registered per minute
 sum(rate(showroom_customers_registered_total[$__rate_interval])) * 60
 
-# Rejets de création par module & raison
+# Creation rejections by module & reason
 sum by (reason) (rate(showroom_orders_create_rejected_total[$__rate_interval]))
 ```
 
-**Dashboard métier** : [`docs/observability/showroom-business.grafana.json`](docs/observability/showroom-business.grafana.json)
-— commandes créées/min, panier moyen (€ et articles), distribution du montant (p50/p95), clients
-inscrits/min, **rejets de création par raison** (les 3 modules), totaux sur la période ; variable `currency`.
+**Business dashboard**: [`docs/observability/showroom-business.grafana.json`](docs/observability/showroom-business.grafana.json)
+— orders created/min, average basket (€ and items), amount distribution (p50/p95), customers
+registered/min, **creation rejections by reason** (all three modules), totals over the period; a
+`currency` variable.
 
 ---
 
@@ -633,12 +769,39 @@ inscrits/min, **rejets de création par raison** (les 3 modules), totaux sur la 
 dotnet test Pops-ShowRoom.slnx
 ```
 
-- **Unitaires** (`*.Tests`) : domaine, assembleurs (`To`/`From`), validateurs.
-- **Intégration** (`*.IntegrationTests`) : endpoints sur un host isolé via Testcontainers PostgreSQL ;
-  le harnais `ShowRoom.Testing` (`BusinessWebFactory<TEntryPoint>`) est générique et chaque suite cible
-  son service.
-- **Architecture** (`ShowRoom.Architecture.Tests`) : frontières entre couches et entre modules
-  (un module ne dépend que du `*.Contracts` d'un autre, jamais de son implémentation).
-- **Front** (`ShowRoom.Web.Tests`) : mapping DTO → view model et orchestration de la façade — chaque
-  statut HTTP (200/400/404/5xx) et l'indisponibilité réseau sont couverts via un stub écrit à la main
-  de l'interface Refit (aucun framework de mock).
+Levels are layered by cost, and each has an **admission criterion**: a test belongs to a level only if
+that level's machinery buys a signal the cheaper level cannot produce.
+
+| Suite | Tooling | Docker | Scope |
+|---|---|---|---|
+| `*.Tests` | xUnit v3 | no | domain, assemblers (`To`/`From`), validators |
+| `ShowRoom.Web.Tests` | xUnit v3 + **bUnit** | no | front-end units + component rendering/interactions |
+| `*.IntegrationTests` | xUnit v3 + Testcontainers | PostgreSQL | endpoints on an isolated host |
+| `ShowRoom.Web.IntegrationTests` | xUnit v3 + chained factories | PostgreSQL | front → API → EF → PostgreSQL |
+| `ShowRoom.Web.E2ETests` | **Playwright** | PostgreSQL + RabbitMQ | browser journeys |
+| `ShowRoom.Architecture.Tests` | ArchUnitNET | no | layer and module boundaries |
+
+- **Back-end integration** (`*.IntegrationTests`): endpoints on an isolated host through a PostgreSQL
+  Testcontainer; the `ShowRoom.Testing` harness (`BusinessWebFactory<TEntryPoint>`) is generic and each
+  suite targets its own service.
+- **Front-end units & components** (`ShowRoom.Web.Tests`) — two layers, no network and no database:
+  - *units*: DTO → view model mapping, validators, facade orchestration — every HTTP status
+    (200/400/404/409/5xx) and network unavailability, through a hand-written stub of the Refit interface;
+  - *components* (**bUnit** on xUnit v3): screen rendering and interactions. One test = one user scenario
+    (found, not found, invalid identifier, service unavailable, **partial success**), using semantic
+    selectors (`role`, `aria-label`, `href`, `th[scope]`) rather than CSS classes. Injected services are
+    doubled by hand — no mocking framework.
+- **Front end, full chain** (`ShowRoom.Web.IntegrationTests`) — the whole chain over a database **created
+  then destroyed**: two chained `WebApplicationFactory` instances (front + Customer service) wired
+  together through `Server.CreateHandler()`, the second backed by a PostgreSQL Testcontainer. The front
+  end renders its SSR HTML from data **actually written by the API**, seeded by the tests themselves via
+  `POST /api/v1/customers`. No open port, no network, no pre-existing data — each test class gets its own
+  container, destroyed at the end (a property verified by `DatabaseIsolationTests`).
+- **Front end, browser journeys** (`ShowRoom.Web.E2ETests`) — **Playwright** over a few critical
+  journeys: disposable PostgreSQL + RabbitMQ containers, the Customer service and the front end launched
+  as **real processes** from their own build output, then Chromium. The only level that exercises the
+  **interactive circuit** (creation form: validation while typing, submission, redirect, duplicate email)
+  and the **shell JavaScript** (mobile menu, back to top) — out of reach for both bUnit and HTTP tests.
+  7 journeys, ~8 s, stable across three consecutive runs.
+- **Architecture** (`ShowRoom.Architecture.Tests`): boundaries between layers and between modules (a
+  module depends only on another's `*.Contracts`, never on its implementation).
