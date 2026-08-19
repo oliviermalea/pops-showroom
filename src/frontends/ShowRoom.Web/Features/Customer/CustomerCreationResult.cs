@@ -1,3 +1,5 @@
+using ShowRoom.Web.Infrastructure.Api.Problems;
+
 namespace ShowRoom.Web.Features.Customer;
 
 /// <summary>Outcome of a customer creation, as the UI needs to distinguish it.</summary>
@@ -17,13 +19,19 @@ public enum CustomerCreationOutcome
 }
 
 /// <summary>Result of a customer creation: an explicit outcome plus the created public id on success.</summary>
-public sealed record CustomerCreationResult(CustomerCreationOutcome Outcome, string? PublicId)
+public sealed record CustomerCreationResult(
+    CustomerCreationOutcome Outcome,
+    string? PublicId,
+    ApiProblem? Problem = null)
 {
     public static CustomerCreationResult Created(string publicId) => new(CustomerCreationOutcome.Created, publicId);
 
-    public static CustomerCreationResult EmailAlreadyUsed() => new(CustomerCreationOutcome.EmailAlreadyUsed, null);
+    public static CustomerCreationResult EmailAlreadyUsed(ApiProblem? problem = null)
+        => new(CustomerCreationOutcome.EmailAlreadyUsed, null, problem);
 
-    public static CustomerCreationResult Rejected() => new(CustomerCreationOutcome.Rejected, null);
+    public static CustomerCreationResult Rejected(ApiProblem? problem = null)
+        => new(CustomerCreationOutcome.Rejected, null, problem);
 
-    public static CustomerCreationResult Unavailable() => new(CustomerCreationOutcome.Unavailable, null);
+    public static CustomerCreationResult Unavailable(ApiProblem? problem = null)
+        => new(CustomerCreationOutcome.Unavailable, null, problem);
 }

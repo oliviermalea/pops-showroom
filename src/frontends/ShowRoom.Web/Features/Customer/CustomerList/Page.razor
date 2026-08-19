@@ -54,6 +54,7 @@
                 <div class="list__state list__state--error list__panel" role="alert">
                     <p>Le service Customer est momentanément indisponible.</p>
                     <a class="list__retry" href="@PageUrl(CurrentPage)">Réessayer</a>
+                    <ApiProblemPanel Problem="result?.Problem" />
                 </div>
             }
             else if (result.Page!.IsEmpty)

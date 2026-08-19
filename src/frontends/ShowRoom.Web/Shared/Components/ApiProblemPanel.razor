@@ -1,0 +1,47 @@
+@using ShowRoom.Web.Infrastructure.Api.Problems
+@* Usings declared here rather than in a _Imports.razor: this component is the shell of the shared
+   layer, and an inherited using is exactly what breaks silently when a file is moved. *@
+
+@if (Problem is { } problem)
+{
+    <details class="problem">
+        <summary class="problem__summary">Détail technique</summary>
+
+        <dl class="problem__grid">
+            <dt class="problem__term">Statut</dt>
+            <dd class="problem__value">@problem.Status@(problem.Title is { Length: > 0 } title ? $" · {title}" : string.Empty)</dd>
+
+            @if (problem.Detail is { Length: > 0 } detail)
+            {
+                <dt class="problem__term">Message</dt>
+                <dd class="problem__value">@detail</dd>
+            }
+
+            @if (problem.HasCodes)
+            {
+                <dt class="problem__term">Codes</dt>
+                <dd class="problem__value">
+                    @foreach (var errorCode in problem.Codes)
+                    {
+                        <code class="problem__code">@errorCode</code>
+                    }
+                </dd>
+            }
+
+            @if (problem.TraceId is { Length: > 0 } traceId)
+            {
+                <dt class="problem__term">Trace</dt>
+                <dd class="problem__value"><code class="problem__code">@traceId</code></dd>
+            }
+        </dl>
+    </details>
+}
+
+@code {
+    /// <summary>
+    /// The ProblemDetails returned by the API, or <c>null</c> when the response carried none — in which
+    /// case nothing is rendered at all.
+    /// </summary>
+    [Parameter]
+    public ApiProblem? Problem { get; set; }
+}

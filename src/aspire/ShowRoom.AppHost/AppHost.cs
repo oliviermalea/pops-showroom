@@ -2,7 +2,16 @@ using ShowRoom.AppHost;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
-var postgres = builder.AddPostgres("postgres")
+// Password pinned as an EXPLICIT parameter, read from user secrets and never generated.
+// Postgres only honours POSTGRES_PASSWORD when initdb runs, i.e. on an empty data directory: with a
+// persisted data volume, a password regenerated behind our back locks the volume out for good — the
+// server starts, rejects every connection, the health check fails, and every resource declaring
+// WaitFor(showroomDb) stays blocked. Declaring the parameter makes a missing value fail fast with an
+// explicit message instead. Set it once with:
+//   dotnet user-secrets set "Parameters:postgres-password" "<local-dev-password>" --project src/aspire/ShowRoom.AppHost
+var postgresPassword = builder.AddParameter("postgres-password", secret: true);
+
+var postgres = builder.AddPostgres("postgres", password: postgresPassword)
     .WithDataVolume()
     .WithPgAdmin(c =>
     {

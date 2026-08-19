@@ -91,49 +91,21 @@ public sealed class CustomerJourneyFixture : IAsyncLifetime
     }
 
     /// <summary>
-    /// Ouvre l'écran interactif et n'en sort qu'une fois le circuit réellement réactif.
+    /// Paie une fois le coût du tout premier circuit (JIT du chemin interactif côté serveur), pour que
+    /// les parcours ne le paient pas dans leurs assertions.
     /// </summary>
     /// <remarks>
-    /// <para>Le WebSocket ouvert ne suffit pas : entre sa connexion et l'attachement des gestionnaires
-    /// d'évènements, une saisie est purement <b>perdue</b> — aucune attente ultérieure ne la rattrape.
-    /// Le premier circuit paie en plus le JIT du chemin interactif côté serveur.</para>
-    ///
-    /// <para>La sonde est donc <b>réessayée</b> : c'est le seul moyen de distinguer « pas encore prêt »
-    /// de « cassé », et cela évite de saupoudrer les parcours de temporisations fixes. Une fois ce coût
-    /// payé, les circuits suivants réagissent immédiatement et les tests peuvent interagir sans
-    /// précaution particulière.</para>
+    /// La course « WebSocket ouvert mais gestionnaires pas encore attachés » n'est PAS traitée ici :
+    /// elle se rejoue à chaque nouveau circuit, donc à chaque navigation. C'est
+    /// <see cref="InteractivePageExtensions.GotoCreateCustomerAsync"/> qui la neutralise, au bon endroit.
     /// </remarks>
     private async Task WarmUpInteractivityAsync()
     {
-        const int attempts = 20;
-
         var page = await NewPageAsync();
 
         try
         {
-            await page.GotoInteractiveAsync("/customers/new");
-
-            for (var attempt = 1; attempt <= attempts; attempt++)
-            {
-                await page.FillAsync("#email", $"pas-un-email-{attempt}");
-                await page.ClickAsync("#firstName");
-
-                try
-                {
-                    await page.Locator(".validation-message").First.WaitForAsync(
-                        new LocatorWaitForOptions { Timeout = 2_000 });
-
-                    return;
-                }
-                catch (TimeoutException)
-                {
-                    // Le circuit n'a pas encore attaché ses gestionnaires : on rejoue la saisie.
-                }
-            }
-
-            throw new InvalidOperationException(
-                $"Le circuit interactif n'a pas réagi après {attempts} tentatives : l'écran de création " +
-                "n'est pas exploitable, inutile de lancer les parcours.");
+            await page.GotoCreateCustomerAsync();
         }
         finally
         {

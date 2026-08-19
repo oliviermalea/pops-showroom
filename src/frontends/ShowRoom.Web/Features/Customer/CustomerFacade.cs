@@ -6,6 +6,7 @@ using ShowRoom.Web.Features.Customer.CustomerDetail;
 using ShowRoom.Web.Features.Customer.CustomerList;
 using ShowRoom.Web.Features.Customer.CustomerOrders;
 using ShowRoom.Web.Infrastructure.Api;
+using ShowRoom.Web.Infrastructure.Api.Problems;
 using ShowRoom.Web.Infrastructure.Api.Refit.Customer;
 using ShowRoom.Web.Infrastructure.PublicIds;
 
@@ -67,13 +68,16 @@ public sealed class CustomerFacade(
                 return CustomerListResult.Loaded(view);
             }
 
+            var problem = ApiProblemReader.From(response);
+
             logger.LogError(
                 response.Error,
-                "[{Feature}] Unexpected status {StatusCode} while listing customers",
+                "[{Feature}] Unexpected status {StatusCode} while listing customers ({Problem})",
                 ListFeature,
-                response.StatusCode);
+                response.StatusCode,
+                Describe(problem));
 
-            return CustomerListResult.Unavailable();
+            return CustomerListResult.Unavailable(problem);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -111,26 +115,39 @@ public sealed class CustomerFacade(
                 return CustomerLookupResult.Found(CustomerDetailMapper.FromApi(response.Content));
             }
 
+            var problem = ApiProblemReader.From(response);
+
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
-                logger.LogInformation("[{Feature}] No customer found for {PublicId}", Feature, normalized);
-                return CustomerLookupResult.NotFound();
+                logger.LogInformation(
+                    "[{Feature}] No customer found for {PublicId} ({Problem})",
+                    Feature,
+                    normalized,
+                    Describe(problem));
+
+                return CustomerLookupResult.NotFound(problem);
             }
 
             if (response.StatusCode == HttpStatusCode.BadRequest)
             {
-                logger.LogWarning("[{Feature}] Backend rejected public id {PublicId}", Feature, normalized);
-                return CustomerLookupResult.InvalidPublicId();
+                logger.LogWarning(
+                    "[{Feature}] Backend rejected public id {PublicId} ({Problem})",
+                    Feature,
+                    normalized,
+                    Describe(problem));
+
+                return CustomerLookupResult.InvalidPublicId(problem);
             }
 
             logger.LogError(
                 response.Error,
-                "[{Feature}] Unexpected status {StatusCode} while loading customer {PublicId}",
+                "[{Feature}] Unexpected status {StatusCode} while loading customer {PublicId} ({Problem})",
                 Feature,
                 response.StatusCode,
-                normalized);
+                normalized,
+                Describe(problem));
 
-            return CustomerLookupResult.Unavailable();
+            return CustomerLookupResult.Unavailable(problem);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -190,26 +207,39 @@ public sealed class CustomerFacade(
                 return CustomerOrdersResult.Found(view);
             }
 
+            var problem = ApiProblemReader.From(response);
+
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
-                logger.LogInformation("[{Feature}] No customer found for {PublicId}", OrdersFeature, normalized);
-                return CustomerOrdersResult.NotFound();
+                logger.LogInformation(
+                    "[{Feature}] No customer found for {PublicId} ({Problem})",
+                    OrdersFeature,
+                    normalized,
+                    Describe(problem));
+
+                return CustomerOrdersResult.NotFound(problem);
             }
 
             if (response.StatusCode == HttpStatusCode.BadRequest)
             {
-                logger.LogWarning("[{Feature}] Backend rejected public id {PublicId}", OrdersFeature, normalized);
-                return CustomerOrdersResult.InvalidPublicId();
+                logger.LogWarning(
+                    "[{Feature}] Backend rejected public id {PublicId} ({Problem})",
+                    OrdersFeature,
+                    normalized,
+                    Describe(problem));
+
+                return CustomerOrdersResult.InvalidPublicId(problem);
             }
 
             logger.LogError(
                 response.Error,
-                "[{Feature}] Unexpected status {StatusCode} while loading the orders of {PublicId}",
+                "[{Feature}] Unexpected status {StatusCode} while loading the orders of {PublicId} ({Problem})",
                 OrdersFeature,
                 response.StatusCode,
-                normalized);
+                normalized,
+                Describe(problem));
 
-            return CustomerOrdersResult.Unavailable();
+            return CustomerOrdersResult.Unavailable(problem);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -251,25 +281,38 @@ public sealed class CustomerFacade(
                 return CustomerCreationResult.Unavailable();
             }
 
+            var problem = ApiProblemReader.From(response);
+
             if (response.StatusCode == HttpStatusCode.Conflict)
             {
-                logger.LogInformation("[{Feature}] Email already used: {Email}", CreateFeature, request.Email);
-                return CustomerCreationResult.EmailAlreadyUsed();
+                logger.LogInformation(
+                    "[{Feature}] Email already used: {Email} ({Problem})",
+                    CreateFeature,
+                    request.Email,
+                    Describe(problem));
+
+                return CustomerCreationResult.EmailAlreadyUsed(problem);
             }
 
             if (response.StatusCode == HttpStatusCode.BadRequest)
             {
-                logger.LogWarning("[{Feature}] Backend rejected the payload for {Email}", CreateFeature, request.Email);
-                return CustomerCreationResult.Rejected();
+                logger.LogWarning(
+                    "[{Feature}] Backend rejected the payload for {Email} ({Problem})",
+                    CreateFeature,
+                    request.Email,
+                    Describe(problem));
+
+                return CustomerCreationResult.Rejected(problem);
             }
 
             logger.LogError(
                 response.Error,
-                "[{Feature}] Unexpected status {StatusCode} while creating a customer",
+                "[{Feature}] Unexpected status {StatusCode} while creating a customer ({Problem})",
                 CreateFeature,
-                response.StatusCode);
+                response.StatusCode,
+                Describe(problem));
 
-            return CustomerCreationResult.Unavailable();
+            return CustomerCreationResult.Unavailable(problem);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -280,6 +323,22 @@ public sealed class CustomerFacade(
             logger.LogError(exception, "[{Feature}] Customer service unreachable while creating a customer", CreateFeature);
             return CustomerCreationResult.Unavailable();
         }
+    }
+
+    /// <summary>
+    /// Renders a problem as one readable log field: the codes are what a support conversation keys on,
+    /// and the trace id ties the line back to the distributed trace of the failing call.
+    /// </summary>
+    private static string Describe(ApiProblem? problem)
+    {
+        if (problem is null)
+        {
+            return "no problem body";
+        }
+
+        var codes = problem.HasCodes ? string.Join(", ", problem.Codes) : "none";
+
+        return $"{problem.Status} {problem.Title ?? "?"}; codes: {codes}; trace: {problem.TraceId ?? "none"}";
     }
 
     /// <summary>

@@ -21,7 +21,7 @@ public sealed class CreateCustomerJourneyTests(CustomerJourneyFixture fixture)
         // Arrange
         var page = await fixture.NewPageAsync();
         var email = $"ada.{Guid.NewGuid():N}@showroom.test";
-        await page.GotoInteractiveAsync("/customers/new");
+        await page.GotoCreateCustomerAsync();
 
         // Act
         await page.FillAsync("#firstName", "Ada");
@@ -46,7 +46,7 @@ public sealed class CreateCustomerJourneyTests(CustomerJourneyFixture fixture)
     {
         // Arrange
         var page = await fixture.NewPageAsync();
-        await page.GotoInteractiveAsync("/customers/new");
+        await page.GotoCreateCustomerAsync();
 
         // Act — la validation se déclenche à la sortie du champ, via le circuit.
         await page.FillAsync("#email", "pas-un-email");
@@ -64,12 +64,12 @@ public sealed class CreateCustomerJourneyTests(CustomerJourneyFixture fixture)
         // Arrange — un client existe déjà avec cet email, créé par le formulaire lui-même.
         var page = await fixture.NewPageAsync();
         var email = $"grace.{Guid.NewGuid():N}@showroom.test";
-        await page.GotoInteractiveAsync("/customers/new");
+        await page.GotoCreateCustomerAsync();
         await SubmitFormAsync(page, "Grace", "Hopper", email);
         await Assertions.Expect(page).ToHaveURLAsync(FichePattern);
 
         // Act — on rejoue exactement le même email.
-        await page.GotoInteractiveAsync("/customers/new");
+        await page.GotoCreateCustomerAsync();
         await SubmitFormAsync(page, "Grace", "Hopper", email);
 
         // Assert

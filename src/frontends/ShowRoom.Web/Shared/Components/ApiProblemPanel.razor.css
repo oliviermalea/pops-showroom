@@ -1,0 +1,62 @@
+/* Diagnostic block: deliberately quiet. It sits under a user-facing message and must never compete
+   with it — the reader opens it only when they need the technical wording. */
+.problem {
+    margin-top: var(--space-4);
+    border-top: 1px solid var(--color-line);
+    padding-top: var(--space-3);
+    font-size: var(--font-size-sm);
+}
+
+.problem__summary {
+    cursor: pointer;
+    color: var(--color-muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-size: var(--font-size-xs);
+    /* >= 44px touch target once the vertical padding is counted. */
+    padding-block: var(--space-3);
+}
+
+.problem__summary:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+}
+
+.problem__grid {
+    display: grid;
+    grid-template-columns: minmax(6rem, auto) 1fr;
+    gap: var(--space-2) var(--space-4);
+    margin: var(--space-2) 0 0;
+}
+
+.problem__term {
+    color: var(--color-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: var(--font-size-xs);
+}
+
+.problem__value {
+    margin: 0;
+    overflow-wrap: break-word;
+}
+
+.problem__code {
+    display: inline-block;
+    /* An error code or a trace id has no natural break point: it must be allowed to wrap anywhere,
+       otherwise it overflows the card on a narrow screen. */
+    word-break: break-all;
+    max-width: 100%;
+    margin-right: var(--space-2);
+}
+
+@media (max-width: 768px) {
+    .problem__grid {
+        grid-template-columns: 1fr;
+        gap: var(--space-1) 0;
+    }
+
+    .problem__term {
+        margin-top: var(--space-2);
+    }
+}

@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -462,6 +463,107 @@ public sealed class CustomerFacadeTests
         RegisteredOn: new DateTimeOffset(2026, 1, 15, 9, 0, 0, TimeSpan.Zero));
 
     /// <summary>Hand-written stub of the Refit interface — no mocking framework needed.</summary>
+    [Fact]
+    public async Task GetCustomerAsync_carries_the_problem_details_returned_with_a_404()
+    {
+        // Arrange
+        var api = FakeCustomerApi.Failing(
+            HttpStatusCode.NotFound,
+            """
+            {
+              "title": "Not Found",
+              "status": 404,
+              "detail": "No customer was found with public id 'cus_0123456789abcdef0123456789abcdef'.",
+              "traceId": "00-abcdef0123456789abcdef0123456789-0123456789abcdef-01",
+              "errors": [ { "code": "Customer.NotFound", "message": "No customer was found.", "category": "NotFound" } ]
+            }
+            """);
+
+        var sut = CreateSut(api);
+
+        // Act
+        var result = await sut.GetCustomerAsync(ValidPublicId, TestContext.Current.CancellationToken);
+
+        // Assert — the outcome still drives the screen; the problem adds what only the server knows.
+        result.Outcome.Should().Be(CustomerLookupOutcome.NotFound);
+        result.Problem.Should().NotBeNull();
+        result.Problem!.Status.Should().Be(404);
+        result.Problem.Has("Customer.NotFound").Should().BeTrue();
+        result.Problem.TraceId.Should().Be("00-abcdef0123456789abcdef0123456789-0123456789abcdef-01");
+    }
+
+    [Fact]
+    public async Task CreateCustomerAsync_exposes_the_server_side_validation_errors_by_field()
+    {
+        // Arrange — the validation shape: errors keyed by "Validation.<PropertyName>".
+        var api = FakeCustomerApi.Failing(
+            HttpStatusCode.BadRequest,
+            """
+            {
+              "title": "Validation Failed",
+              "status": 400,
+              "errors": {
+                "Validation.Email": ["Email must be a valid email address."],
+                "Validation.FirstName": ["First name is required."]
+              }
+            }
+            """);
+
+        var sut = CreateSut(api);
+
+        // Act
+        var result = await sut.CreateCustomerAsync(
+            new CreateCustomerForm { FirstName = "Ada", LastName = "Lovelace", Email = "ada@example.com" },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        result.Outcome.Should().Be(CustomerCreationOutcome.Rejected);
+        result.Problem!.FieldErrors.Should().ContainKeys("Email", "FirstName");
+    }
+
+    [Fact]
+    public async Task CreateCustomerAsync_carries_the_conflict_code_when_the_email_is_taken()
+    {
+        // Arrange
+        var api = FakeCustomerApi.Failing(
+            HttpStatusCode.Conflict,
+            """
+            {
+              "title": "Conflict",
+              "status": 409,
+              "detail": "A customer with this email already exists.",
+              "errors": [ { "code": "Customer.EmailAlreadyExists", "message": "Already exists.", "category": "Conflict" } ]
+            }
+            """);
+
+        var sut = CreateSut(api);
+
+        // Act
+        var result = await sut.CreateCustomerAsync(
+            new CreateCustomerForm { FirstName = "Ada", LastName = "Lovelace", Email = "ada@example.com" },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        result.Outcome.Should().Be(CustomerCreationOutcome.EmailAlreadyUsed);
+        result.Problem!.Has("Customer.EmailAlreadyExists").Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task A_failure_without_a_problem_body_still_yields_its_status()
+    {
+        // Arrange — a proxy answering 503 with nothing readable must not break the facade.
+        var api = FakeCustomerApi.Failing(HttpStatusCode.ServiceUnavailable, "<html>503</html>");
+        var sut = CreateSut(api);
+
+        // Act
+        var result = await sut.GetCustomerAsync(ValidPublicId, TestContext.Current.CancellationToken);
+
+        // Assert
+        result.Outcome.Should().Be(CustomerLookupOutcome.Unavailable);
+        result.Problem!.Status.Should().Be(503);
+        result.Problem.HasCodes.Should().BeFalse();
+    }
+
     private sealed class FakeCustomerApi : ICustomerApi
     {
         private readonly HttpStatusCode statusCode;
@@ -470,6 +572,7 @@ public sealed class CustomerFacadeTests
         private readonly PagedResponse<CustomerSummaryResponse>? page;
         private readonly CustomerWithOrdersResponse? withOrders;
         private readonly Exception? exception;
+        private readonly string? problemBody;
 
         private FakeCustomerApi(
             HttpStatusCode statusCode,
@@ -477,7 +580,8 @@ public sealed class CustomerFacadeTests
             string? createdPublicId,
             PagedResponse<CustomerSummaryResponse>? page,
             CustomerWithOrdersResponse? withOrders,
-            Exception? exception)
+            Exception? exception,
+            string? problemBody = null)
         {
             this.statusCode = statusCode;
             this.detail = detail;
@@ -485,6 +589,7 @@ public sealed class CustomerFacadeTests
             this.page = page;
             this.withOrders = withOrders;
             this.exception = exception;
+            this.problemBody = problemBody;
         }
 
         public int CallCount { get; private set; }
@@ -499,6 +604,10 @@ public sealed class CustomerFacadeTests
 
         public static FakeCustomerApi Returning(HttpStatusCode statusCode, CustomerDetailResponse? content)
             => new(statusCode, content, createdPublicId: null, page: null, withOrders: null, exception: null);
+
+        /// <summary>Answers <paramref name="statusCode"/> with a real RFC 7807 body, like the API does.</summary>
+        public static FakeCustomerApi Failing(HttpStatusCode statusCode, string problemBody)
+            => new(statusCode, detail: null, createdPublicId: null, page: null, withOrders: null, exception: null, problemBody);
 
         public static FakeCustomerApi Creating(HttpStatusCode statusCode, string? content)
             => new(statusCode, detail: null, content, page: null, withOrders: null, exception: null);
@@ -530,7 +639,8 @@ public sealed class CustomerFacadeTests
                 new ApiResponse<CustomerWithOrdersResponse>(
                     new HttpResponseMessage(statusCode),
                     withOrders,
-                    new RefitSettings()));
+                    new RefitSettings(),
+                    BuildError()));
         }
 
         public Task<ApiResponse<PagedResponse<CustomerSummaryResponse>>> GetCustomersAsync(
@@ -553,7 +663,8 @@ public sealed class CustomerFacadeTests
                 new ApiResponse<PagedResponse<CustomerSummaryResponse>>(
                     new HttpResponseMessage(statusCode),
                     this.page,
-                    new RefitSettings()));
+                    new RefitSettings(),
+                    BuildError()));
         }
 
         public Task<ApiResponse<CustomerDetailResponse>> GetCustomerByPublicIdAsync(
@@ -571,7 +682,11 @@ public sealed class CustomerFacadeTests
             }
 
             return Task.FromResult(
-                new ApiResponse<CustomerDetailResponse>(new HttpResponseMessage(statusCode), detail, new RefitSettings()));
+                new ApiResponse<CustomerDetailResponse>(
+                    new HttpResponseMessage(statusCode),
+                    detail,
+                    new RefitSettings(),
+                    BuildError()));
         }
 
         public Task<ApiResponse<string>> CreateCustomerAsync(
@@ -589,7 +704,34 @@ public sealed class CustomerFacadeTests
             }
 
             return Task.FromResult(
-                new ApiResponse<string>(new HttpResponseMessage(statusCode), createdPublicId, new RefitSettings()));
+                new ApiResponse<string>(
+                    new HttpResponseMessage(statusCode),
+                    createdPublicId,
+                    new RefitSettings(),
+                    BuildError()));
+        }
+
+        /// <summary>
+        /// Builds the <see cref="ApiException"/> Refit attaches to a failed <see cref="ApiResponse{T}"/>,
+        /// so the facade reads the problem body through exactly the same path as in production.
+        /// </summary>
+        private ApiException? BuildError()
+        {
+            if (problemBody is null)
+            {
+                return null;
+            }
+
+            var response = new HttpResponseMessage(statusCode)
+            {
+                Content = new StringContent(problemBody, Encoding.UTF8, "application/problem+json"),
+            };
+
+            return ApiException.Create(
+                new HttpRequestMessage(HttpMethod.Get, "http://localhost/api/v1/customers"),
+                HttpMethod.Get,
+                response,
+                new RefitSettings()).GetAwaiter().GetResult();
         }
     }
 }

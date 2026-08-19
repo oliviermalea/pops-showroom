@@ -129,6 +129,10 @@
     padding-left: var(--space-2);
 }
 
+.form__error-text {
+    margin: 0;
+}
+
 .form__actions {
     display: flex;
     flex-direction: row;

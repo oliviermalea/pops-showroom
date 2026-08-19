@@ -70,22 +70,27 @@
                     break;
 
                 case CustomerLookupOutcome.InvalidPublicId:
-                    <p class="orders__state orders__state--error" role="alert">
-                        Identifiant invalide : un <code>PublicId</code> ShowRoom s'écrit
-                        <code>cus_</code> suivi de 32 caractères hexadécimaux.
-                    </p>
+                    <div class="orders__state orders__state--error" role="alert">
+                        <p>
+                            Identifiant invalide : un <code>PublicId</code> ShowRoom s'écrit
+                            <code>cus_</code> suivi de 32 caractères hexadécimaux.
+                        </p>
+                        <ApiProblemPanel Problem="result.Problem" />
+                    </div>
                     break;
 
                 case CustomerLookupOutcome.NotFound:
-                    <p class="orders__state orders__state--error" role="alert">
-                        Aucun client ne correspond à <code>@PublicId</code>.
-                    </p>
+                    <div class="orders__state orders__state--error" role="alert">
+                        <p>Aucun client ne correspond à <code>@PublicId</code>.</p>
+                        <ApiProblemPanel Problem="result.Problem" />
+                    </div>
                     break;
 
                 default:
                     <div class="orders__state orders__state--error" role="alert">
                         <p>Le service Customer est momentanément indisponible.</p>
                         <a class="orders__retry" href="@($"/customers/{PublicId}/orders")">Réessayer</a>
+                        <ApiProblemPanel Problem="result.Problem" />
                     </div>
                     break;
             }

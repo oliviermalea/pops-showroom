@@ -2,6 +2,7 @@ using AwesomeAssertions;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using ShowRoom.Web.Features.Customer;
+using ShowRoom.Web.Infrastructure.Api.Problems;
 using ShowRoom.Web.Tests.Doubles;
 using Xunit;
 using DetailPage = ShowRoom.Web.Features.Customer.CustomerDetail.Page;
@@ -144,5 +145,43 @@ public sealed class PageTests : BunitContext
 
         // Assert — après
         sut.Find("article").TextContent.Should().Contain("Ada Lovelace");
+    }
+
+    [Fact]
+    public void An_error_state_carries_the_problem_details_returned_by_the_api()
+    {
+        // Arrange — la fiche reste introuvable pour l'utilisateur, mais le support dispose du code et
+        // de la trace pour retrouver l'appel exact.
+        var facade = Facade();
+        facade.LookupResult = CustomerLookupResult.NotFound(new ApiProblem(
+            404,
+            "Not Found",
+            "No customer was found with this public id.",
+            "00-1234567890abcdef-01",
+            [new ApiProblemError("Customer.NotFound", "No customer was found.")]));
+
+        // Act
+        var sut = RenderPage();
+
+        // Assert
+        sut.Find("[role='alert']").TextContent.Should().Contain("Aucun client ne correspond");
+
+        var panel = sut.Find("details.problem");
+        panel.TextContent.Should().Contain("Customer.NotFound");
+        panel.TextContent.Should().Contain("00-1234567890abcdef-01");
+    }
+
+    [Fact]
+    public void An_error_state_without_a_problem_body_shows_no_diagnostic_panel()
+    {
+        // Arrange
+        var facade = Facade();
+        facade.LookupResult = CustomerLookupResult.NotFound();
+
+        // Act
+        var sut = RenderPage();
+
+        // Assert
+        sut.FindAll("details.problem").Should().BeEmpty();
     }
 }

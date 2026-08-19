@@ -150,7 +150,10 @@ assemblies that depend on nothing but the framework and the shared kernel.
 Validation failures, not-found, conflicts and domain-rule violations flow as `Result`/`Error` and are
 translated once into uniform RFC 7807 ProblemDetails. Exceptions are kept for the genuinely exceptional.
 The front end mirrors this: a `404`/`409` is **business data** turned into an explicit outcome, not a
-thrown exception.
+thrown exception — and the ProblemDetails body is **read**, so a server-side rejection lands on the form
+field it names and the `traceId` reaches the screen (see
+[Blazor front end](#blazor-front-end-showroomweb)). The error **code** is the contract; the message is
+the server's own wording.
 
 ### 12. Observability ships with the feature
 
@@ -315,6 +318,46 @@ Pops-ShowRoom.slnx
 
 **Prerequisites**: .NET 10 SDK, Docker (PostgreSQL + RabbitMQ through Testcontainers/Aspire).
 
+### 1. Local secrets (one-off, per clone and per machine)
+
+The PostgreSQL password is an **explicit parameter** the AppHost reads from user secrets and **never
+generates** — see [the gotcha](#3-the-password-and-the-data-volume-are-bound-together) below. Set it once:
+
+```bash
+dotnet user-secrets set "Parameters:postgres-password" "<local-dev-password>" --project src/aspire/ShowRoom.AppHost
+```
+
+Missing it is not silent: the AppHost refuses to start with an explicit message naming the missing
+configuration key, rather than bringing up a database nothing can connect to.
+
+Secrets are keyed by the `UserSecretsId` declared in
+[`ShowRoom.AppHost.csproj`](src/aspire/ShowRoom.AppHost/ShowRoom.AppHost.csproj), and stored **outside
+the repository**, per user and per machine — a fresh clone, another machine or a reset Windows profile
+starts with nothing.
+
+List what exists (values are printed in clear):
+
+```bash
+dotnet user-secrets list --project src/aspire/ShowRoom.AppHost
+```
+
+Edit the file directly if you prefer (`<UserSecretsId>` is the folder name):
+
+```bash
+code "$env:APPDATA\Microsoft\UserSecrets\<UserSecretsId>\secrets.json"
+```
+
+Drop one key to start over:
+
+```bash
+dotnet user-secrets remove "Parameters:postgres-password" --project src/aspire/ShowRoom.AppHost
+```
+
+Expected keys: `Parameters:postgres-password`, `Parameters:messaging-password`, plus Aspire's own
+(`AppHost:OtlpApiKey`, `AppHost:DashboardApiKey`, version check).
+
+### 2. Run the stack
+
 ```bash
 dotnet run --project src/aspire/ShowRoom.AppHost
 ```
@@ -332,6 +375,28 @@ dotnet run --project src/frontends/ShowRoom.Web
 
 > Tip: to watch the distributed trace, call `GET /api/v1/customers/{publicId}/with-orders` on the
 > Customer service — a single trace crosses Customer.Api → RabbitMQ → Business.Api in the dashboard.
+
+### 3. The password and the data volume are bound together
+
+> ⚠️ `WithDataVolume()` persists the data directory, and PostgreSQL only honours `POSTGRES_PASSWORD`
+> when `initdb` runs — that is, on an **empty** volume. It never reads it again. So a password that
+> changes afterwards locks the existing volume out permanently, and the failure is **silent by nature**:
+> the server starts and looks healthy from the outside, then rejects every connection
+> (`password authentication failed for user "postgres"`), the Aspire health check fails, and **every
+> resource declaring `WaitFor(showroomDb)` stays blocked** — both APIs, hence the front end. Nothing in
+> the logs names the password as the culprit.
+
+Declaring the parameter explicitly is what prevents a regeneration behind your back. If you **do** change
+the password on purpose, drop the volume in the same move (Aspire stopped) — the migration pipeline
+rebuilds the `customers` / `orders` / `products` schemas at the next start, and the Wolverine message
+stores are auto-provisioned:
+
+```bash
+docker volume rm showroom.apphost-a6fd80faab-postgres-data
+```
+
+The same reasoning does **not** apply to `Parameters:messaging-password`: RabbitMQ carries no data volume
+here, so changing it is inconsequential.
 
 ---
 
@@ -408,6 +473,7 @@ src/frontends/ShowRoom.Web/
 │  └─ Customer/                    # Customer module
 │     ├─ CustomerFacade.cs         # THE module's entry point for the UI (+ ICustomerFacade)
 │     ├─ CustomerFormat.cs         # presentation rules shared across screens
+│     ├─ CustomerProblemMessages.cs # API error codes → the French sentences the UI shows
 │     ├─ CustomerListResult.cs     # outcome: Loaded / Unavailable
 │     ├─ CustomerLookupResult.cs   # outcome: Found / InvalidPublicId / NotFound / Unavailable
 │     ├─ CustomerCreationResult.cs # outcome: Created / EmailAlreadyUsed / Rejected / Unavailable
@@ -426,8 +492,10 @@ src/frontends/ShowRoom.Web/
 │  │  └─ Refit/
 │  │     ├─ Models/PagedResponse.cs # shared pagination envelope (all modules)
 │  │     └─ Customer/              # ICustomerApi + Models/ (List + Get + WithOrders + Create)
+│  ├─ Problems/                    # ApiProblem + ApiProblemReader (RFC 7807 handling)
 │  ├─ Validation/                  # FluentValidationValidator (plugs FluentValidation into EditForm)
 │  └─ PublicIds/PublicIdFormat.cs  # boundary format check
+├─ Shared/Components/              # reusable UI (ApiProblemPanel: the diagnostic block)
 ├─ customer.refitter               # Refitter configuration (optional generation — see below)
 └─ wwwroot/
    ├─ app.css                      # swiss design system (CSS tokens)
@@ -441,6 +509,35 @@ ServiceDefaults resilience handler). Methods return `ApiResponse<T>`: a `404`/`4
 data** translated into an explicit outcome (`CustomerLookupOutcome`, `CustomerCreationOutcome`), not an
 exception. Every state (loading / empty / invalid / not found / unavailable / success) has its own branch
 in the page.
+
+**API errors: ProblemDetails, read rather than discarded.** Every ShowRoom API answers a failure with
+RFC 7807. The front end parses it (`Infrastructure/Api/Problems/`) and normalises the **two shapes** the
+backend emits — a validation failure keys `errors` by code, every other failure lists them:
+
+| Failure | `errors` shape | Example code |
+|---|---|---|
+| Validation (400) | object keyed by code | `Validation.Email` |
+| Business (404 / 409) | array of `{code, message, category}` | `Customer.NotFound`, `Customer.EmailAlreadyExists` |
+
+Three properties are deliberate:
+
+- **The code is the contract, the message is a hint.** The API answers in its own language, so the
+  user-facing sentence is resolved from the CODE (`CustomerProblemMessages`), never from the server's
+  `detail` — which would put backend wording in the UI and couple the screen to a string the backend may
+  reword. The server text stays available in the diagnostic panel.
+- **`Validation.<PropertyName>` lands on the field it names.** The backend codes its FluentValidation
+  failures over command properties carrying the form's own names, so a server-side rejection appears
+  under the right input instead of in a vague banner — pushed into a second `ValidationMessageStore`,
+  cleared on every validation request (otherwise a stale server error would veto every later submit,
+  `EditContext.Validate()` being false while any store holds a message).
+- **The `traceId` is surfaced**, in a collapsed `<details>` block next to the message: it is what ties a
+  user-visible failure back to its distributed trace. Nothing is rendered when the response carried no
+  readable body — a transport failure shows no empty shell.
+
+The parser never throws: an empty body, an HTML page from a reverse proxy or a truncated payload all
+degrade to the bare status. A contract test in the integration suite (`ProblemDetailsContractTests`)
+pins the shapes against the **real** API — unit tests only prove the reader parses what we believe is
+returned.
 
 **Hosting model and render modes.** `ShowRoom.Web` is a **Blazor Web App** (the unified .NET 8+ model,
 one project, `blazor.web.js`) — not the old "ASP.NET Core hosted WebAssembly" template (removed in
@@ -777,7 +874,7 @@ that level's machinery buys a signal the cheaper level cannot produce.
 | `*.Tests` | xUnit v3 | no | domain, assemblers (`To`/`From`), validators |
 | `ShowRoom.Web.Tests` | xUnit v3 + **bUnit** | no | front-end units + component rendering/interactions |
 | `*.IntegrationTests` | xUnit v3 + Testcontainers | PostgreSQL | endpoints on an isolated host |
-| `ShowRoom.Web.IntegrationTests` | xUnit v3 + chained factories | PostgreSQL | front → API → EF → PostgreSQL |
+| `ShowRoom.Web.IntegrationTests` | xUnit v3 + chained factories | PostgreSQL | front → API → EF → PostgreSQL, and the ProblemDetails contract |
 | `ShowRoom.Web.E2ETests` | **Playwright** | PostgreSQL + RabbitMQ | browser journeys |
 | `ShowRoom.Architecture.Tests` | ArchUnitNET | no | layer and module boundaries |
 
@@ -802,6 +899,6 @@ that level's machinery buys a signal the cheaper level cannot produce.
   as **real processes** from their own build output, then Chromium. The only level that exercises the
   **interactive circuit** (creation form: validation while typing, submission, redirect, duplicate email)
   and the **shell JavaScript** (mobile menu, back to top) — out of reach for both bUnit and HTTP tests.
-  7 journeys, ~8 s, stable across three consecutive runs.
+  7 journeys, ~16 s, stable across four consecutive runs.
 - **Architecture** (`ShowRoom.Architecture.Tests`): boundaries between layers and between modules (a
   module depends only on another's `*.Contracts`, never on its implementation).

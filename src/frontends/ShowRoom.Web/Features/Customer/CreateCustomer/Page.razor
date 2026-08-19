@@ -3,6 +3,7 @@
 @* Seul ecran interactif du module : validation au fil de la saisie et etat de soumission
    exigent un circuit. Les ecrans de lecture, eux, sont en SSR statique. *@
 @using ShowRoom.Web.Features.Customer
+@using ShowRoom.Web.Infrastructure.Api.Problems
 @using ShowRoom.Web.Infrastructure.Validation
 @inject ICustomerFacade CustomerFacade
 @inject NavigationManager Navigation
@@ -25,6 +26,7 @@
 
         <EditForm class="form" Model="form" OnValidSubmit="SubmitAsync" FormName="create-customer">
             <FluentValidationValidator />
+            <ServerValidationMessages @ref="serverValidation" />
 
             <div class="form__field">
                 <label class="form__label" for="firstName">Prénom</label>
@@ -58,7 +60,10 @@
 
             @if (failure is not null)
             {
-                <p class="form__error" role="alert">@failure</p>
+                <div class="form__error" role="alert">
+                    <p class="form__error-text">@failure</p>
+                    <ApiProblemPanel Problem="problem" />
+                </div>
             }
 
             <div class="form__actions">
@@ -78,17 +83,21 @@
 
 @code {
     private CreateCustomerForm form = new();
+    private ServerValidationMessages serverValidation = default!;
     private bool isSubmitting;
     private string? failure;
+    private ApiProblem? problem;
 
     private async Task SubmitAsync()
     {
         isSubmitting = true;
         failure = null;
+        problem = null;
 
         try
         {
             var result = await CustomerFacade.CreateCustomerAsync(form);
+            problem = result.Problem;
 
             switch (result.Outcome)
             {
@@ -97,11 +106,24 @@
                     return;
 
                 case CustomerCreationOutcome.EmailAlreadyUsed:
-                    failure = $"Un client utilise déjà l'email {form.Email.Trim()}.";
+                    // Uniqueness is decidable server-side only. The code names no field, but this screen
+                    // knows which input it concerns — and knows the address the user just typed, which
+                    // the code table cannot.
+                    var duplicate = $"Un client utilise déjà l'email {form.Email.Trim()}.";
+                    serverValidation.Show(
+                        result.Problem,
+                        CustomerProblemMessages.ForField,
+                        [(nameof(CreateCustomerForm.Email), duplicate)]);
+
+                    failure = duplicate;
                     break;
 
                 case CustomerCreationOutcome.Rejected:
-                    failure = "Le service a refusé la saisie. Vérifiez les informations renseignées.";
+                    failure = serverValidation.Show(result.Problem, CustomerProblemMessages.ForField)
+                        ? "Le service a refusé la saisie : voyez le détail sous les champs concernés."
+                        : CustomerProblemMessages.Resolve(
+                            result.Problem,
+                            "Le service a refusé la saisie. Vérifiez les informations renseignées.");
                     break;
 
                 default:
@@ -119,5 +141,7 @@
     {
         form = new CreateCustomerForm();
         failure = null;
+        problem = null;
+        serverValidation.Clear();
     }
 }

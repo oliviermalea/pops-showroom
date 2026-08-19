@@ -156,6 +156,14 @@ Prefer managed platform capabilities first:
 - Never commit secrets in repository.
 - Use secure secret stores/platform secret injection.
 - Rotate sensitive credentials with an explicit process.
+- **A credential guarding persisted state must be an explicit parameter, never an auto-generated one.**
+  A datastore initialises its credentials once, when it creates its data directory, and ignores them on
+  every later start: a password regenerated behind the orchestrator's back does not fail loudly, it
+  locks the existing volume out for good — the server starts, rejects every connection, the health check
+  fails, and everything declaring `WaitFor(<store>)` stays blocked with no obvious culprit. Declare the
+  parameter (`builder.AddParameter("<name>", secret: true)`) so a missing value fails fast with an
+  explicit message, document the one-off `user-secrets set` in the README, and document the recovery
+  (drop the volume, let migrations rebuild) next to it.
 
 ### 8.2 Failure handling
 - Define timeout/retry policy for external dependencies.

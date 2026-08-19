@@ -582,8 +582,13 @@ The step it was validated on is named in the heading, so the context of the deci
   `InteractiveServer` screen the page is first prerendered statically, and input sent too early is
   **lost**, not deferred.
 - **An open WebSocket is not enough**: between the connection and the attachment of event handlers, the
-  very first event can still be lost. Absorb that cost once in the fixture, with a **retried** probe until
-  an observable reaction occurs — never a fixed delay, which will be either too short or wasted time.
+  very first event can still be lost. Neutralise it with a **retried** probe until an observable reaction
+  occurs — never a fixed delay, which will be either too short or wasted time.
+- **That probe belongs to the navigation, not to the fixture.** Paying it once at fixture start only
+  protects the first circuit: every navigation opens a new one and replays the same race. Measured on
+  the creation journey, a fixture-only warm-up failed 1 run in 3; moving the probe into the navigation
+  helper (`GotoCreateCustomerAsync`) took it to 4 green runs in a row. What is still worth paying once
+  in the fixture is the server-side JIT of the interactive path.
 - **A Blazor navigation produces no `load` event**: `WaitForURLAsync` (which waits for one by default)
   times out. Assert the URL with `Expect(page).ToHaveURLAsync(...)`, which retries.
 - Widen the assertion timeout (`Assertions.SetDefaultExpectTimeout`): 5 s by default is too short for a
@@ -610,3 +615,51 @@ The step it was validated on is named in the heading, so the context of the deci
   `aria-expanded="@isOpen"` renders an empty attribute (Blazor's boolean attribute semantics): the value
   `"true"` never exists, which breaks both accessibility and `[aria-expanded="true"]` selectors.
 - Mobile menu states: `.menu-toggle` >= 44x44px, a clickable backdrop, closing on a link click.
+
+### Shell placement, guarded (validated — "blank page" regression)
+- `_Imports.razor` files are **hierarchical**: moving a component to another folder changes the
+  `@using` it inherits, hence the components it can resolve. And Razor **does not report an unknown
+  component tag** — it copies it out as literal HTML. Dragging `App.razor` out of `App/` therefore turns
+  `<Routes />` into an inert tag: the application compiles, starts, and serves a blank page with no error
+  anywhere (no build warning, no console message, no log).
+- The compile error such a move does produce (`MapRazorComponents<App>()` no longer resolving) is a
+  **decoy**: adding the missing `@using` makes it build and does not make it work. Never silence that
+  error without asking why the type moved.
+- Pin the placement with a test that names the types (`ShowRoom.Web.Tests/Shell/ShellPlacementTests`):
+  `typeof(global::ShowRoom.Web.App.App)` and friends turn a move into a **test-project compilation
+  failure**, long before anything renders. Complete it with the reverse direction — every routable
+  component (`RouteAttribute`) lives under `Features/`, the shell making only its `Error`/`NotFound`
+  surfaces routable.
+
+### API errors as ProblemDetails (validated — "ProblemDetails" step)
+- A failed response is **read, not discarded**. `Infrastructure/Api/Problems/` holds an `ApiProblem`
+  (status, title, detail, `traceId`, errors) and an `ApiProblemReader` that normalises the **two shapes**
+  ShowRoom APIs emit: a validation failure keys `errors` by code (`{"Validation.Email": ["…"]}`), every
+  other failure lists them (`[{code, message, category}]`). A screen must never have to know which one
+  it got.
+- **The reader never throws.** An error body is exactly where the unexpected arrives — an empty body, an
+  HTML page from a reverse proxy, a truncated payload. Every parse failure degrades to the bare status;
+  a parser blowing up while handling an error would turn a diagnosable failure into an opaque one.
+- **The code is the contract, the message is a hint.** The API answers in its own language: rendering
+  its `detail` into the UI would put a foreign, backend-worded sentence in front of the user and couple
+  the screen to a string the backend is free to reword. Resolve the user-facing sentence from the CODE
+  (`<Module>ProblemMessages`), and keep the server text for the diagnostic panel. Exception: on a form
+  FIELD, an unmapped server message still beats a generic one — it says what to fix.
+- Where the screen knows more than the code table, the screen wins: a 409 on a creation form says
+  *which* address is taken, because it holds what the user typed.
+- **`Validation.<PropertyName>` maps straight onto form fields.** The backend codes FluentValidation
+  failures that way over command properties that carry the form's own names, so server-side validation
+  lands on the field it concerns instead of in a vague banner — push it into a **second**
+  `ValidationMessageStore`, next to the client-side one.
+- **Clear that store on `OnValidationRequested` and per field on `OnFieldChanged`.**
+  `EditContext.Validate()` returns false while ANY store holds a message: a stale server error would
+  silently veto every later submit — the form would refuse to send and show nothing new. Lock it with a
+  test that submits twice.
+- The diagnostic block (`Shared/Components/ApiProblemPanel`) is a collapsed `<details>` carrying status,
+  server message, codes and **`traceId`** — the field that ties a user-visible failure back to its
+  distributed trace. It renders nothing when the response carried no body, so a transport failure shows
+  no empty shell.
+- Prove the SHAPE against the real API, not against a body the test wrote itself: a contract test in the
+  integration suite (`ProblemDetailsContractTests`) asserts the codes, the two `errors` shapes and the
+  presence of `traceId`. Unit tests prove the reader parses what we *believe* is returned; only a real
+  host proves what *is*.
