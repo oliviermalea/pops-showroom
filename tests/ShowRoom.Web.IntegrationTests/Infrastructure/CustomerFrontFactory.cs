@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Http;
 using ShowRoom.Web.Infrastructure.Api;
 
 namespace ShowRoom.Web.IntegrationTests.Infrastructure;
@@ -36,8 +37,13 @@ public sealed class CustomerFrontFactory(HttpMessageHandler backendHandler)
                 ["BackendApi:ApiVersion"] = "1",
             }));
 
+        // PostConfigureAll, et non ConfigureHttpClientDefaults : les valeurs par defaut s'appliquent
+        // AVANT la configuration propre a chaque client, si bien qu'un client qui pose son propre
+        // gestionnaire primaire — ce que fait le client Refit genere — ecrase la substitution et part
+        // vers le reseau. Une post-configuration passe en dernier, donc elle gagne toujours.
         builder.ConfigureServices(services =>
-            services.ConfigureHttpClientDefaults(client =>
-                client.ConfigurePrimaryHttpMessageHandler(() => backendHandler)));
+            services.PostConfigureAll<HttpClientFactoryOptions>(options =>
+                options.HttpMessageHandlerBuilderActions.Add(handlerBuilder =>
+                    handlerBuilder.PrimaryHandler = backendHandler)));
     }
 }

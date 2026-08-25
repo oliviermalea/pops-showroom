@@ -7,6 +7,10 @@
     <IsPackable>false</IsPackable>
     <AssemblyName>ShowRoom.Testing</AssemblyName>
     <RootNamespace>ShowRoom.Testing</RootNamespace>
+    <!-- Harness library, not a test project: it carries no test, and letting the runner treat it as one
+         makes a fully green `dotnet test` exit non-zero with "zero tests ran". -->
+    <IsTestProject>false</IsTestProject>
+    <IsTestingPlatformApplication>false</IsTestingPlatformApplication>
   </PropertyGroup>
 
   <ItemGroup>
