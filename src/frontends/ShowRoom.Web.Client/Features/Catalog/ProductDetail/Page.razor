@@ -1,0 +1,111 @@
+@page "/catalog/{PublicId}"
+@rendermode InteractiveWebAssembly
+@using ShowRoom.Web.Client.Features.Catalog
+@using ShowRoom.Web.Shared.Components
+@inject ICatalogFacade CatalogFacade
+
+<PageTitle>@PageTitleText</PageTitle>
+
+<section class="product" aria-labelledby="product-title">
+    <div class="product__meta">
+        <p class="section-label">Module Product</p>
+        <span class="module-tag">WebAssembly</span>
+    </div>
+
+    <div class="product__body">
+        <div class="product__header">
+            <h1 class="product__title" id="product-title">Détail produit</h1>
+            <a class="product__back" href="/catalog">Retour au catalogue</a>
+        </div>
+
+        @if (isLoading)
+        {
+            <div class="product__card product__card--skeleton" role="status" aria-busy="true"
+                 aria-live="polite" aria-label="Chargement du produit">
+                <span class="product__bar product__bar--name" aria-hidden="true"></span>
+                <span class="product__bar product__bar--text" aria-hidden="true"></span>
+                <span class="product__bar product__bar--text" aria-hidden="true"></span>
+            </div>
+        }
+        else if (result is not null)
+        {
+            switch (result.Outcome)
+            {
+                case ProductLookupOutcome.Found when result.Product is { } product:
+                    <article class="product__card">
+                        <h2 class="product__name">@product.Name</h2>
+
+                        <dl class="product__facts">
+                            <dt>Prix</dt>
+                            <dd class="product__price">@product.Price</dd>
+
+                            <dt>Statut</dt>
+                            <dd class="product__status @(product.IsAvailable ? "product__status--on" : "product__status--off")">
+                                @product.Status
+                            </dd>
+
+                            <dt>Identifiant public</dt>
+                            <dd><code class="product__public-id">@product.PublicId</code></dd>
+                        </dl>
+
+                        <p class="product__description">@product.Description</p>
+                    </article>
+                    break;
+
+                case ProductLookupOutcome.InvalidPublicId:
+                    <div class="product__state product__state--error" role="alert">
+                        <p>
+                            Identifiant invalide : un <code>PublicId</code> ShowRoom s'écrit
+                            <code>prd_</code> suivi de 32 caractères hexadécimaux.
+                        </p>
+                        <ApiProblemPanel Problem="result.Problem" />
+                    </div>
+                    break;
+
+                case ProductLookupOutcome.NotFound:
+                    <div class="product__state product__state--error" role="alert">
+                        <p>Aucun produit ne correspond à <code>@PublicId</code>.</p>
+                        <ApiProblemPanel Problem="result.Problem" />
+                    </div>
+                    break;
+
+                default:
+                    <div class="product__state product__state--error" role="alert">
+                        <p>Le catalogue est momentanément indisponible.</p>
+                        <button type="button" class="product__retry" @onclick="LoadAsync">Réessayer</button>
+                        <ApiProblemPanel Problem="result.Problem" />
+                    </div>
+                    break;
+            }
+        }
+    </div>
+</section>
+
+@code {
+    [Parameter]
+    public string? PublicId { get; set; }
+
+    private ProductLookupResult? result;
+    private bool isLoading;
+
+    private string PageTitleText => result?.Product is { } product
+        ? $"{product.Name} — ShowRoom"
+        : "Détail produit — ShowRoom";
+
+    protected override Task OnParametersSetAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        result = null;
+
+        try
+        {
+            result = await CatalogFacade.GetProductAsync(PublicId);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

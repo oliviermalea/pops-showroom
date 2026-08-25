@@ -1,7 +1,7 @@
 using AwesomeAssertions;
 using ShowRoom.Web.Features.Customer.CustomerList;
 using ShowRoom.Web.Infrastructure.Api.Refit.Customer.Models;
-using ShowRoom.Web.Infrastructure.Api.Refit.Models;
+using ShowRoom.Web.Shared.Api.Models;
 using Xunit;
 
 namespace ShowRoom.Web.Tests.Features.Customer.CustomerList;

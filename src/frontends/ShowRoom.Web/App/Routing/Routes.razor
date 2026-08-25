@@ -1,6 +1,16 @@
-<Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(NotFound)">
+@using ShowRoom.Web.Client
+
+@* AdditionalAssemblies : les pages du catalogue vivent dans l'assembly WebAssembly, que le routeur
+   ne découvre pas tout seul. *@
+<Router AppAssembly="typeof(Program).Assembly"
+        AdditionalAssemblies="additionalAssemblies"
+        NotFoundPage="typeof(NotFound)">
     <Found Context="routeData">
         <RouteView RouteData="routeData" DefaultLayout="typeof(MainLayout)" />
         <FocusOnNavigate RouteData="routeData" Selector="h1" />
     </Found>
 </Router>
+
+@code {
+    private static readonly System.Reflection.Assembly[] additionalAssemblies = [ClientAssembly.Value];
+}

@@ -1,4 +1,4 @@
-using ShowRoom.Web.Infrastructure.Api.Problems;
+using ShowRoom.Web.Shared.Api.Problems;
 
 namespace ShowRoom.Web.Features.Customer;
 

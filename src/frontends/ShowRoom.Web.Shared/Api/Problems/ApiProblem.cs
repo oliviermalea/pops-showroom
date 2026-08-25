@@ -1,4 +1,4 @@
-namespace ShowRoom.Web.Infrastructure.Api.Problems;
+namespace ShowRoom.Web.Shared.Api.Problems;
 
 /// <summary>One error carried by a ProblemDetails payload: a stable code and its server-side message.</summary>
 /// <param name="Code">

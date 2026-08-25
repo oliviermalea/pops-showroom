@@ -1,6 +1,6 @@
 using AwesomeAssertions;
 using ShowRoom.Web.Features.Customer;
-using ShowRoom.Web.Infrastructure.Api.Problems;
+using ShowRoom.Web.Shared.Api.Problems;
 using Xunit;
 
 namespace ShowRoom.Web.Tests.Features.Customer;

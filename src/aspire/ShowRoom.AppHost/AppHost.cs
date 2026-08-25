@@ -33,6 +33,11 @@ var messaging = builder.AddRabbitMQ("messaging")
 builder.AddProject<Projects.ShowRoom_Business_Api>("showroom-business-api")
     .WithHttpEndpoint(port: 5204, name: "http")
     .WithHttpsEndpoint(port: 7106, name: "https")
+    // The catalogue screens run in WebAssembly and call this API straight from the browser, so it must
+    // name the origins it accepts. Injected here rather than committed: the front's ports are pinned
+    // just below, and a hard-coded origin in source would outlive its environment.
+    .WithEnvironment("Cors__AllowedOrigins__0", "https://localhost:7108")
+    .WithEnvironment("Cors__AllowedOrigins__1", "http://localhost:5206")
     .WithReference(showroomDb)
     .WaitFor(showroomDb)
     .WithReference(messaging)
@@ -59,5 +64,9 @@ builder.AddProject<Projects.ShowRoom_Web>("showroom-web")
     .WithReference(customerApi)
     .WaitFor(customerApi)
     .WithExternalHttpEndpoints();
+
+// Note: the front does NOT take a reference on the Business API. The catalogue screens reach it from
+// the browser, with an absolute URL read from configuration — service discovery would resolve to
+// nothing there. Only the prerender pass runs server-side, and it uses that same absolute URL.
 
 builder.Build().Run();

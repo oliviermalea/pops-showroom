@@ -438,6 +438,10 @@ All routes are versioned under `/api/v{version}` (v1 by default). Resources are 
 **Common to both services**: `GET /api/status`, `GET /health` (readiness), `GET /alive` (liveness),
 `/openapi` + `/scalar` (development).
 
+> The Business API also declares a **CORS** policy (`Cors:AllowedOrigins`, `GET` only, injected by the
+> AppHost): the catalogue screens run in WebAssembly and call it straight from the browser. It is the
+> only place where a browser is a first-class client of an API here.
+
 ---
 
 ## Blazor front end (ShowRoom.Web)
@@ -454,6 +458,8 @@ and instrumented like the services (ServiceDefaults + Serilog → OTLP, `/health
 | `/customers/{publicId}` | Customer detail | `GET /api/v1/customers/{publicId}` |
 | `/customers/{publicId}/orders` | Order history (cross-service aggregate) | `GET /api/v1/customers/{publicId}/with-orders` |
 | `/customers/new` | Customer creation (form) | `POST /api/v1/customers` |
+| `/catalog` | Product catalogue (grid, paginated) | `GET /api/v1/products` |
+| `/catalog/{publicId}` | Product detail | `GET /api/v1/products/{publicId}` |
 
 Together these screens cover the **4 reference screens** convention
 ([`frontend.md`](.claude/rules/frontend.md) §2.3): consultation, creation, grouping, navigation. The list
@@ -497,6 +503,18 @@ src/frontends/ShowRoom.Web/
 │  └─ PublicIds/PublicIdFormat.cs  # boundary format check
 ├─ Shared/Components/              # reusable UI (ApiProblemPanel: the diagnostic block)
 ├─ customer.refitter               # Refitter configuration (optional generation — see below)
+                                     #
+src/frontends/ShowRoom.Web.Shared/   # Razor Class Library, browser-compatible
+├─ Api/Problems/                     # ApiProblem + ApiProblemReader (RFC 7807)
+├─ Api/Models/PagedResponse.cs       # shared pagination envelope
+├─ Components/ApiProblemPanel.razor  # diagnostic block, used by both front ends
+└─ PublicIds/PublicIdFormat.cs       # boundary format check
+                                     #
+src/frontends/ShowRoom.Web.Client/   # WebAssembly project — downloaded and run by the browser
+├─ ClientAssembly.cs                 # marker the host declares to the router and the render mode
+├─ Program.cs                        # WASM entry point (browser-side DI)
+├─ Features/Catalog/                 # facade, outcomes, format, ProductList/ + ProductDetail/
+└─ Infrastructure/Api/               # CatalogApiRegistration (called from BOTH sides), IProductApi
 └─ wwwroot/
    ├─ app.css                      # swiss design system (CSS tokens)
    └─ App/Layout/shell.js          # shell behaviour in plain JS (mobile menu, back to top)
@@ -549,10 +567,11 @@ setting.
 
 The render mode is decided **per screen**, not globally:
 
-| Screen | Render mode | SignalR circuit |
-|---|---|---|
-| Home, list, detail, orders | **Static SSR** + `[StreamRendering]` | **none** |
-| Customer creation | `InteractiveServer` | yes (validation while typing) |
+| Screen | Render mode | Runs where | Circuit |
+|---|---|---|---|
+| Home, customer list, detail, orders | **Static SSR** + `[StreamRendering]` | server | **none** |
+| Customer creation | `InteractiveServer` | server | yes (validation while typing) |
+| **Catalogue, product detail** | **`InteractiveWebAssembly`** | **browser** | none (no circuit either) |
 
 Verified on the served HTML: 0 interactive-component markers on the read screens, 1 on `/customers/new`.
 Interactions on static screens go through the web: a **GET form** for the filter, **links** for
@@ -562,6 +581,37 @@ reload, and URLs stay shareable.
 The shell (mobile menu, back-to-top) is driven by `wwwroot/App/Layout/shell.js` in **plain JS**: turning
 those into interactive components would reopen a circuit on every page and cancel the benefit of static
 SSR.
+
+**The catalogue runs in the browser (WebAssembly).** It is the third render mode of the same
+application, deliberately kept as a comparison point. Three consequences are structural, not incidental:
+
+- **A separate project is mandatory.** `ShowRoom.Web.Client` is a `Microsoft.NET.Sdk.BlazorWebAssembly`
+  project: the host assembly is never sent to the browser, so a WASM component cannot live in it. The
+  host declares that assembly twice — to the router and to the render mode.
+- **The component runs twice.** Prerendering is on, so it executes once on the server before the runtime
+  reaches the browser. Its dependencies exist in both containers through a **single** registration
+  method (`AddCatalog`) called from both `Program.cs` — one place, no drift.
+- **The BFF property is lost for these screens.** The browser resolves the API address itself, so it must
+  be absolute (service discovery means nothing there) and `ShowRoom.Business.Api` declares **CORS** for
+  the front's origin, `GET` only. The server-rendered screens keep their BFF property: the arbitration is
+  per screen, and this is what it costs.
+
+Measured on a Release publish, with trimming:
+
+| | First load | Interaction |
+|---|---|---|
+| Server-rendered screen (`/customers`) | 21.6 KB | round-trip to the server |
+| Catalogue (`/catalog`) | **2.9 MB Brotli** for `_framework` (9.6 MB raw) — ~2.4 MB actually fetched, only one of the three ICU files being downloaded | **local**: paginating re-issues the HTTP call alone, with no navigation |
+
+That is roughly a hundredfold on first load, bought back on every later interaction. Verified in the
+browser: no circuit marker on `/catalog` (a `"type":"webassembly"` marker instead), the products request
+leaving the browser straight to `https://localhost:7106`, and paging that changes the page without
+losing the JavaScript context.
+
+> ⚠️ **Scoped CSS does not travel the same way.** A Razor Class Library's bundle is auto-imported into
+> the host's `ShowRoom.Web.styles.css`; a referenced WebAssembly **project** produces its own bundle,
+> which is not. It must be linked in `App.razor`, otherwise the screens render **unstyled with no error
+> anywhere** — the markup even carries its scope attribute, which makes it look like a CSS mistake.
 
 **Streaming.** Read screens declare `@attribute [StreamRendering]`: the shell leaves from the first byte
 and data is streamed as soon as the API answers, instead of holding back the whole HTML response.

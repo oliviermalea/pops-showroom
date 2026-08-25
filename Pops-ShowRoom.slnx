@@ -10,6 +10,8 @@
   </Folder>
   <Folder Name="/src/Frontends/">
     <Project Path="src/frontends/ShowRoom.Web/ShowRoom.Web.csproj" />
+    <Project Path="src/frontends/ShowRoom.Web.Shared/ShowRoom.Web.Shared.csproj" />
+    <Project Path="src/frontends/ShowRoom.Web.Client/ShowRoom.Web.Client.csproj" />
   </Folder>
   <Folder Name="/src/BuildingBlocks/">
     <Project Path="src/buildingblocks/ShowRoom.BuildingBlocks/ShowRoom.BuildingBlocks.csproj" Id="7c5bdd51-2dc5-480a-80e6-6cdb3e6b6026" />

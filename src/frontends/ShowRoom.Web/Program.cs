@@ -5,6 +5,8 @@ using Serilog;
 using Serilog.Events;
 using Serilog.Sinks.SystemConsole.Themes;
 using ShowRoom.Web.App;
+using ShowRoom.Web.Client;
+using ShowRoom.Web.Client.Infrastructure.Api;
 using ShowRoom.Web.Features.Customer;
 using ShowRoom.Web.Infrastructure.Api;
 
@@ -30,11 +32,17 @@ builder.Host.UseSerilog(
 builder.AddServiceDefaults();
 
 builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
+    .AddInteractiveServerComponents()
+    .AddInteractiveWebAssemblyComponents();
 
 // Typed backend clients (Refit over IHttpClientFactory) + the module facades the UI orchestrates.
 builder.Services.AddBackendApis(builder.Configuration);
 builder.Services.AddScoped<ICustomerFacade, CustomerFacade>();
+
+// The catalogue screens run in WebAssembly, but they are PRERENDERED here first: the same components
+// execute once on this server before the runtime reaches the browser, so their dependencies must exist
+// on this side too. Same registration method as the client's Program.cs — one place, no drift.
+builder.Services.AddCatalog(builder.Configuration);
 
 // Response compression of the DYNAMIC responses (the SSR HTML). Static assets are already served
 // pre-compressed and fingerprinted by MapStaticAssets, so they are deliberately NOT re-compressed here.
@@ -100,7 +108,11 @@ app.Use(async (context, next) =>
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
+    .AddInteractiveServerRenderMode()
+    .AddInteractiveWebAssemblyRenderMode()
+    // Without this, the routes declared in the client assembly simply do not exist: the router only
+    // scans the assemblies it is told about, and a missing one shows up as a 404, not as an error.
+    .AddAdditionalAssemblies(ClientAssembly.Value);
 
 app.Run();
 

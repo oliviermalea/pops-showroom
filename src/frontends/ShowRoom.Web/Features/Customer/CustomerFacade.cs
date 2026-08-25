@@ -6,9 +6,9 @@ using ShowRoom.Web.Features.Customer.CustomerDetail;
 using ShowRoom.Web.Features.Customer.CustomerList;
 using ShowRoom.Web.Features.Customer.CustomerOrders;
 using ShowRoom.Web.Infrastructure.Api;
-using ShowRoom.Web.Infrastructure.Api.Problems;
+using ShowRoom.Web.Shared.Api.Problems;
 using ShowRoom.Web.Infrastructure.Api.Refit.Customer;
-using ShowRoom.Web.Infrastructure.PublicIds;
+using ShowRoom.Web.Shared.PublicIds;
 
 namespace ShowRoom.Web.Features.Customer;
 

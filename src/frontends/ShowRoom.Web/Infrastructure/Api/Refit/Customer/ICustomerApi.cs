@@ -1,6 +1,6 @@
 using Refit;
 using ShowRoom.Web.Infrastructure.Api.Refit.Customer.Models;
-using ShowRoom.Web.Infrastructure.Api.Refit.Models;
+using ShowRoom.Web.Shared.Api.Models;
 
 namespace ShowRoom.Web.Infrastructure.Api.Refit.Customer;
 

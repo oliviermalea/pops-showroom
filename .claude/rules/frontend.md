@@ -74,7 +74,30 @@ This is a minimum convention to frame scope and implementation effort per featur
 
 These rules are intentionally minimal (not exhaustive), but mandatory as a foundation baseline.
 
-### 2.5 Boundaries
+### 2.5 Shared front-end code lives in a dedicated project (mandatory)
+
+Anything shared or shareable between front-end deliverables goes into **`ShowRoom.Web.Shared`**, a Razor
+Class Library — the front-end counterpart of Aspire's `ServiceDefaults`. Duplicating a component, a
+design token or a transport contract between two front-end projects is a defect.
+
+- **It must stay WebAssembly-compatible.** Declare `<SupportedPlatform Include="browser" />` and depend
+  on the `Microsoft.AspNetCore.Components.Web` **package**, never on a `FrameworkReference` to
+  `Microsoft.AspNetCore.App`: the server framework does not exist in the browser, and referencing it
+  makes the whole library unusable from a WASM client. Server-only concerns (Serilog, hosting,
+  resilience pipelines, response compression) stay in the host.
+- **Structure it by concern, not as a dumping ground** — `Components/`, `Api/`, `PublicIds/`,
+  `Validation/`, `Styles/`. §2.6's warning about god-shared folders applies inside this project too: a
+  flat `Shared/` that hides coupling is exactly what it must not become.
+- **Admission criterion**: a type belongs here when a second front-end consumer needs it, or when it is
+  by nature cross-cutting (design tokens, error contracts, format guards). Move code in when the need
+  appears, not in anticipation — a move of Razor files is the manipulation that silently breaks
+  rendering (see "Shell placement, guarded").
+- **The global stylesheet does NOT need to move.** It is loaded by the HTML document the host serves, so
+  every render mode inherits it; only *scoped* CSS follows its component into the library, where the SDK
+  aggregates it into the host's `.styles.css` bundle. Moving `app.css` would buy nothing and cost a
+  `_content/` indirection.
+
+### 2.6 Boundaries
 - Do not import internal code across domains in an uncontrolled way.
 - Shared code goes to explicit shared packages/folders (`shared/ui`, `shared/utils`, etc.).
 - Avoid “god” shared folders that hide coupling.
@@ -663,3 +686,33 @@ The step it was validated on is named in the heading, so the context of the deci
   integration suite (`ProblemDetailsContractTests`) asserts the codes, the two `errors` shapes and the
   presence of `traceId`. Unit tests prove the reader parses what we *believe* is returned; only a real
   host proves what *is*.
+
+### WebAssembly render mode (validated — "catalogue" step)
+- The term is **`InteractiveWebAssembly`**, a per-component *render mode* — not a hosting model.
+  "Blazor Server" and "Blazor WASM" as hosting models are .NET 6/7 vocabulary; since .NET 8 a single
+  Blazor Web App picks interactivity **per screen**.
+- **Those components must live in a separate `Microsoft.NET.Sdk.BlazorWebAssembly` project**, referenced
+  by the host. This is an execution constraint, not a convention: the host assembly is never sent to the
+  browser. A page moved into the host compiles, starts, and only fails at runtime — pin it with a test
+  that names the types (`WebAssemblyPlacementTests`).
+- **The host must declare the client assembly twice**: to the router (`AdditionalAssemblies` on
+  `<Router>`) and to the render mode (`AddAdditionalAssemblies`). Miss either and the routes simply do
+  not exist — it shows up as a 404, not as an error.
+- **Prerendering is on by default**, so the component runs ONCE ON THE SERVER before the runtime reaches
+  the browser. Its dependencies must therefore exist in both containers. Write **one** registration
+  method and call it from both `Program.cs` files: duplicating it lets a screen work prerendered and fail
+  interactive, or the reverse — the hardest kind of bug to reproduce.
+- **The API address is resolved in the browser**, so it must be an absolute, publicly reachable URL: an
+  Aspire service-discovery scheme means nothing there. Consequences to accept explicitly, because they
+  are the real price of the render mode: the **BFF property is lost** for those screens (the API URL
+  becomes public), the API must declare **CORS** for the front's origin, and server-side resilience and
+  service discovery no longer apply to those calls.
+- **Scoped CSS does not travel the same way from a library and from a WASM project.** A Razor Class
+  Library's bundle is auto-imported into the host's `<App>.styles.css` (an `@import` is added on the
+  first line). A referenced WebAssembly *project* produces its own `<Client>.styles.css`, which is NOT
+  imported: link it in `App.razor` or the screens render **unstyled, with no error anywhere** — the
+  markup even carries its scope attribute, which makes it look like a CSS bug.
+- **Measure the cost, do not assume it.** Published in Release with trimming: `_framework` weighs 9.6 MB
+  raw, **2.9 MB Brotli** (~2.4 MB actually fetched — only one ICU file of the three is downloaded),
+  against 21.6 KB for a server-rendered screen. It buys local interactions: paginating the catalogue
+  re-issues only the HTTP call, with no navigation and no circuit. Choose per screen accordingly.

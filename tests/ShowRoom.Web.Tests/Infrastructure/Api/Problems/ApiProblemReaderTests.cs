@@ -1,5 +1,5 @@
 using AwesomeAssertions;
-using ShowRoom.Web.Infrastructure.Api.Problems;
+using ShowRoom.Web.Shared.Api.Problems;
 using Xunit;
 
 namespace ShowRoom.Web.Tests.Infrastructure.Api.Problems;

@@ -1,4 +1,4 @@
-namespace ShowRoom.Web.Infrastructure.Api.Refit.Models;
+namespace ShowRoom.Web.Shared.Api.Models;
 
 /// <summary>
 /// Wire shape of the shared pagination envelope returned by every ShowRoom list endpoint

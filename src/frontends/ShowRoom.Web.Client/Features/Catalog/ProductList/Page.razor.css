@@ -1,0 +1,190 @@
+/* Le layout global possède l'espacement vertical de page : cet écran ne remet ni marge ni padding
+   extérieurs (voir frontend.md §10). */
+.catalog {
+    display: grid;
+    grid-template-columns: 3fr 9fr;
+    gap: var(--space-8);
+    padding: 0;
+}
+
+.catalog__meta {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.catalog__body {
+    min-width: 0;
+}
+
+.catalog__header {
+    border-bottom: 1px solid var(--color-line);
+    padding-bottom: var(--space-4);
+    margin-bottom: var(--space-6);
+}
+
+.catalog__title {
+    font-size: var(--font-size-2xl);
+    line-height: var(--line-height-tight);
+    margin: 0 0 var(--space-3);
+    overflow-wrap: break-word;
+}
+
+.catalog__intro {
+    margin: 0;
+    max-width: var(--max-col-text);
+    color: var(--color-muted);
+    line-height: var(--line-height-loose);
+}
+
+.catalog__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+    gap: var(--space-4);
+}
+
+.card {
+    border: 1px solid var(--color-line);
+    padding: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    background: var(--color-surface);
+    transition: border-color var(--transition-fast);
+}
+
+.card:hover {
+    border-color: var(--color-ink);
+}
+
+.card__name {
+    font-size: var(--font-size-base);
+    margin: 0;
+    overflow-wrap: break-word;
+}
+
+.card__link {
+    color: inherit;
+    text-decoration: none;
+}
+
+.card__link:hover,
+.card__link:focus-visible {
+    text-decoration: underline;
+}
+
+.card__price {
+    margin: 0;
+    font-size: var(--font-size-lg);
+}
+
+.card__status {
+    margin: 0;
+    font-size: var(--font-size-xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.card__status--on { color: var(--color-domain); }
+
+.card__status--off { color: var(--color-muted); }
+
+/* Squelette : il annonce la grille, il n'en imite pas la hauteur exacte. */
+.card--skeleton {
+    gap: var(--space-3);
+}
+
+.card__bar {
+    display: block;
+    height: 0.75rem;
+    background: linear-gradient(90deg, var(--color-grey-10), var(--color-grey-30), var(--color-grey-10));
+    background-size: 200% 100%;
+    animation: catalog-shimmer 1.4s ease-in-out infinite;
+}
+
+.card__bar--title { width: 70%; }
+
+.card__bar--price { width: 40%; height: 1rem; }
+
+.card__bar--status { width: 30%; height: 0.6rem; }
+
+@keyframes catalog-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+.catalog__state {
+    padding: var(--space-4);
+    border: 1px solid var(--color-line);
+}
+
+.catalog__state--muted { color: var(--color-muted); }
+
+.catalog__state--error { border-left: 2px solid var(--color-features); }
+
+.catalog__retry,
+.catalog__page {
+    font: inherit;
+    font-size: var(--font-size-sm);
+    background: none;
+    border: 1px solid var(--color-line);
+    padding: var(--space-2) var(--space-4);
+    /* >= 44px de cible tactile une fois le padding compté. */
+    min-height: 2.75rem;
+    cursor: pointer;
+    transition: border-color var(--transition-fast);
+}
+
+.catalog__retry:hover:enabled,
+.catalog__page:hover:enabled {
+    border-color: var(--color-ink);
+}
+
+.catalog__page:disabled {
+    color: var(--color-muted);
+    cursor: not-allowed;
+}
+
+.catalog__pager {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    margin-top: var(--space-6);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--color-line);
+    flex-wrap: wrap;
+}
+
+.catalog__count {
+    margin: 0;
+    font-size: var(--font-size-sm);
+    color: var(--color-muted);
+}
+
+.catalog__pager-actions {
+    display: flex;
+    gap: var(--space-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .card__bar { animation: none; }
+}
+
+@media (max-width: 1024px) {
+    .catalog {
+        grid-template-columns: 1fr;
+        gap: var(--space-4);
+    }
+}
+
+@media (max-width: 768px) {
+    .catalog__title { font-size: var(--font-size-xl); }
+
+    .catalog__grid { grid-template-columns: 1fr; }
+
+    .catalog__pager {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}

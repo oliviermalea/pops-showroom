@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace ShowRoom.Web.Infrastructure.PublicIds;
+namespace ShowRoom.Web.Shared.PublicIds;
 
 /// <summary>
 /// Boundary check on the public id format (<c>abc_</c> + 32 hex chars) used by every ShowRoom API.
