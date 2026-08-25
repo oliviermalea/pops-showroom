@@ -686,3 +686,33 @@ The step it was validated on is named in the heading, so the context of the deci
   integration suite (`ProblemDetailsContractTests`) asserts the codes, the two `errors` shapes and the
   presence of `traceId`. Unit tests prove the reader parses what we *believe* is returned; only a real
   host proves what *is*.
+
+### WebAssembly render mode (validated — "catalogue" step)
+- The term is **`InteractiveWebAssembly`**, a per-component *render mode* — not a hosting model.
+  "Blazor Server" and "Blazor WASM" as hosting models are .NET 6/7 vocabulary; since .NET 8 a single
+  Blazor Web App picks interactivity **per screen**.
+- **Those components must live in a separate `Microsoft.NET.Sdk.BlazorWebAssembly` project**, referenced
+  by the host. This is an execution constraint, not a convention: the host assembly is never sent to the
+  browser. A page moved into the host compiles, starts, and only fails at runtime — pin it with a test
+  that names the types (`WebAssemblyPlacementTests`).
+- **The host must declare the client assembly twice**: to the router (`AdditionalAssemblies` on
+  `<Router>`) and to the render mode (`AddAdditionalAssemblies`). Miss either and the routes simply do
+  not exist — it shows up as a 404, not as an error.
+- **Prerendering is on by default**, so the component runs ONCE ON THE SERVER before the runtime reaches
+  the browser. Its dependencies must therefore exist in both containers. Write **one** registration
+  method and call it from both `Program.cs` files: duplicating it lets a screen work prerendered and fail
+  interactive, or the reverse — the hardest kind of bug to reproduce.
+- **The API address is resolved in the browser**, so it must be an absolute, publicly reachable URL: an
+  Aspire service-discovery scheme means nothing there. Consequences to accept explicitly, because they
+  are the real price of the render mode: the **BFF property is lost** for those screens (the API URL
+  becomes public), the API must declare **CORS** for the front's origin, and server-side resilience and
+  service discovery no longer apply to those calls.
+- **Scoped CSS does not travel the same way from a library and from a WASM project.** A Razor Class
+  Library's bundle is auto-imported into the host's `<App>.styles.css` (an `@import` is added on the
+  first line). A referenced WebAssembly *project* produces its own `<Client>.styles.css`, which is NOT
+  imported: link it in `App.razor` or the screens render **unstyled, with no error anywhere** — the
+  markup even carries its scope attribute, which makes it look like a CSS bug.
+- **Measure the cost, do not assume it.** Published in Release with trimming: `_framework` weighs 9.6 MB
+  raw, **2.9 MB Brotli** (~2.4 MB actually fetched — only one ICU file of the three is downloaded),
+  against 21.6 KB for a server-rendered screen. It buys local interactions: paginating the catalogue
+  re-issues only the HTTP call, with no navigation and no circuit. Choose per screen accordingly.

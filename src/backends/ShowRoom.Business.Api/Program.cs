@@ -7,6 +7,7 @@ using Serilog.Sinks.SystemConsole.Themes;
 using ShowRoom.BuildingBlocks.Http.Errors;
 using ShowRoom.BuildingBlocks.Messaging;
 using ShowRoom.BuildingBlocks.Observability;
+using ShowRoom.Business.Api.Cors;
 using ShowRoom.Business.Api.Modules;
 using ShowRoom.Modules.Order;
 using ShowRoom.Modules.Product;
@@ -39,6 +40,9 @@ builder.Services.AddOpenApi();
 // (see BadRequestExceptionHandler) instead of a raw stack trace / opaque 500.
 builder.Services.AddShowRoomProblemDetails();
 builder.Services.AddFeatureManagement();
+// The WebAssembly catalogue screens call this API from the browser: it must name the origins
+// it accepts (see BrowserClientsCors).
+builder.Services.AddBrowserClientsCors(builder.Configuration);
 builder.Services.AddApiVersioning(options =>
 {
     options.DefaultApiVersion = new ApiVersion(1);
@@ -95,6 +99,9 @@ else
 }
 
 app.UseHttpsRedirection();
+
+// Before any endpoint: a preflight OPTIONS must be answered by the CORS middleware, not routed.
+app.UseBrowserClientsCors();
 
 // Module middleware, gated by the module feature flag.
 app.RegisterOrderModule(ModulesRegistry.Order);

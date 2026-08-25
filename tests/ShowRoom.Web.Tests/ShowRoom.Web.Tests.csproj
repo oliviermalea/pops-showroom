@@ -23,6 +23,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\..\src\frontends\ShowRoom.Web\ShowRoom.Web.csproj" />
+		<ProjectReference Include="..\..\src\frontends\ShowRoom.Web.Client\ShowRoom.Web.Client.csproj" />
 	</ItemGroup>
 
 </Project>

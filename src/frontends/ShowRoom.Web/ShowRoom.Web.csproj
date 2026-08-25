@@ -10,6 +10,10 @@
 	<ItemGroup>
 		<PackageReference Include="FluentValidation" />
 		<PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+		<!-- Sert le runtime WebAssembly et fournit AddInteractiveWebAssemblyComponents /
+		     AddInteractiveWebAssemblyRenderMode : c'est ce paquet qui rend l'hote capable de servir
+		     un client WASM, la reference de projet seule ne suffit pas. -->
+		<PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" />
 		<PackageReference Include="Microsoft.Extensions.Http.Resilience" />
 		<PackageReference Include="Refit" />
 		<PackageReference Include="Refit.HttpClientFactory" />
@@ -24,6 +28,7 @@
 	<ItemGroup>
 		<ProjectReference Include="..\..\aspire\ShowRoom.ServiceDefaults\ShowRoom.ServiceDefaults.csproj" />
 		<ProjectReference Include="..\ShowRoom.Web.Shared\ShowRoom.Web.Shared.csproj" />
+		<ProjectReference Include="..\ShowRoom.Web.Client\ShowRoom.Web.Client.csproj" />
 	</ItemGroup>
 
 </Project>

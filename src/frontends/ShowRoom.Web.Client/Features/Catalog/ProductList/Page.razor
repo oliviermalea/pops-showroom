@@ -1,0 +1,136 @@
+@page "/catalog"
+@rendermode InteractiveWebAssembly
+@* Le catalogue est le seul écran exécuté DANS LE NAVIGATEUR (.NET compilé en WebAssembly). Les autres
+   écrans restent en SSR statique ou en InteractiveServer : le render mode se décide par écran. *@
+@using ShowRoom.Web.Client.Features.Catalog
+@using ShowRoom.Web.Shared.Components
+@inject ICatalogFacade CatalogFacade
+
+<PageTitle>Catalogue — ShowRoom</PageTitle>
+
+<section class="catalog" aria-labelledby="catalog-title">
+    <div class="catalog__meta">
+        <p class="section-label">Module Product</p>
+        <span class="module-tag">WebAssembly</span>
+    </div>
+
+    <div class="catalog__body">
+        <div class="catalog__header">
+            <h1 class="catalog__title" id="catalog-title">Catalogue</h1>
+            <p class="catalog__intro">
+                Cet écran s'exécute dans votre navigateur : le .NET est compilé en WebAssembly, et les
+                appels à <code>GET /api/v1/products</code> partent du poste client, pas du serveur.
+            </p>
+        </div>
+
+        @if (isLoading)
+        {
+            <div class="catalog__grid" role="status" aria-busy="true" aria-live="polite"
+                 aria-label="Chargement du catalogue">
+                @for (var i = 0; i < SkeletonCards; i++)
+                {
+                    <article class="card card--skeleton" aria-hidden="true">
+                        <span class="card__bar card__bar--title"></span>
+                        <span class="card__bar card__bar--price"></span>
+                        <span class="card__bar card__bar--status"></span>
+                    </article>
+                }
+            </div>
+        }
+        else if (result is null || result.Outcome == ProductListOutcome.Unavailable)
+        {
+            <div class="catalog__state catalog__state--error" role="alert">
+                <p>Le catalogue est momentanément indisponible.</p>
+                <button type="button" class="catalog__retry" @onclick="LoadAsync">Réessayer</button>
+                <ApiProblemPanel Problem="result?.Problem" />
+            </div>
+        }
+        else if (result.Page!.IsEmpty)
+        {
+            <p class="catalog__state catalog__state--muted">Aucun produit au catalogue pour le moment.</p>
+        }
+        else
+        {
+            <div class="catalog__grid">
+                @foreach (var product in result.Page.Items)
+                {
+                    <article class="card">
+                        <h2 class="card__name">
+                            <a class="card__link" href="@($"/catalog/{product.PublicId}")">@product.Name</a>
+                        </h2>
+                        <p class="card__price">@product.Price</p>
+                        <p class="card__status @(product.IsAvailable ? "card__status--on" : "card__status--off")">
+                            @product.Status
+                        </p>
+                    </article>
+                }
+            </div>
+        }
+
+        <nav class="catalog__pager" aria-label="Pagination du catalogue"
+             style="@(ShowPager ? null : "visibility:hidden")">
+            <p class="catalog__count">
+                @if (result?.Page is { IsEmpty: false } page)
+                {
+                    @($"{page.FirstItemIndex}–{page.LastItemIndex} sur {page.TotalItems} · page {page.Page} / {page.TotalPages}")
+                }
+            </p>
+
+            <div class="catalog__pager-actions">
+                <button type="button" class="catalog__page" disabled="@(!CanGoPrevious)"
+                        @onclick="() => GoToAsync(currentPage - 1)">
+                    Précédent
+                </button>
+                <button type="button" class="catalog__page" disabled="@(!CanGoNext)"
+                        @onclick="() => GoToAsync(currentPage + 1)">
+                    Suivant
+                </button>
+            </div>
+        </nav>
+    </div>
+</section>
+
+@code {
+    /// <summary>Nombre de cartes du squelette : constant, il annonce la grille sans en imiter la taille.</summary>
+    private const int SkeletonCards = 6;
+
+    /// <summary>Taille de page : c'est l'écran qui décide combien de cartes il affiche, la façade borne.</summary>
+    private const int PageSize = 12;
+
+    private ProductListResult? result;
+    private bool isLoading;
+    private int currentPage = 1;
+
+    private bool ShowPager => result?.Page is { IsEmpty: false };
+
+    private bool CanGoPrevious => !isLoading && result?.Page?.HasPrevious == true;
+
+    private bool CanGoNext => !isLoading && result?.Page?.HasNext == true;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    /// <summary>
+    /// La pagination ne recharge pas la page : l'assembly est déjà dans le navigateur, seul l'appel HTTP
+    /// repart. C'est la contrepartie utile du coût de téléchargement initial.
+    /// </summary>
+    private async Task GoToAsync(int page)
+    {
+        currentPage = page < 1 ? 1 : page;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        result = null;
+
+        try
+        {
+            result = await CatalogFacade.GetProductsAsync(currentPage, PageSize);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}
