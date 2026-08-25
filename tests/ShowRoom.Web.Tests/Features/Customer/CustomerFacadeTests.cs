@@ -637,7 +637,7 @@ public sealed class CustomerFacadeTests
 
             return Task.FromResult(
                 new ApiResponse<CustomerWithOrdersResponse>(
-                    new HttpResponseMessage(statusCode),
+                    Respond(),
                     withOrders,
                     new RefitSettings(),
                     BuildError()));
@@ -661,7 +661,7 @@ public sealed class CustomerFacadeTests
 
             return Task.FromResult(
                 new ApiResponse<PagedResponse<CustomerSummaryResponse>>(
-                    new HttpResponseMessage(statusCode),
+                    Respond(),
                     this.page,
                     new RefitSettings(),
                     BuildError()));
@@ -683,7 +683,7 @@ public sealed class CustomerFacadeTests
 
             return Task.FromResult(
                 new ApiResponse<CustomerDetailResponse>(
-                    new HttpResponseMessage(statusCode),
+                    Respond(),
                     detail,
                     new RefitSettings(),
                     BuildError()));
@@ -705,11 +705,26 @@ public sealed class CustomerFacadeTests
 
             return Task.FromResult(
                 new ApiResponse<string>(
-                    new HttpResponseMessage(statusCode),
+                    Respond(),
                     createdPublicId,
                     new RefitSettings(),
                     BuildError()));
         }
+
+        /// <summary>
+        /// Builds the HTTP response the doubles hand back.
+        /// </summary>
+        /// <remarks>
+        /// The <see cref="HttpResponseMessage.RequestMessage"/> is not decorative: since Refit 15,
+        /// <see cref="ApiResponse{T}"/> refuses a response with no associated request
+        /// (<c>ArgumentException: Response must have an associated request message</c>). A double that
+        /// omits it throws inside the facade, which reports every call as unavailable — the failure
+        /// surfaces as a wrong outcome rather than as the type error it really is.
+        /// </remarks>
+        private HttpResponseMessage Respond() => new(statusCode)
+        {
+            RequestMessage = new HttpRequestMessage(HttpMethod.Get, "http://localhost/api/v1/customers"),
+        };
 
         /// <summary>
         /// Builds the <see cref="ApiException"/> Refit attaches to a failed <see cref="ApiResponse{T}"/>,
@@ -722,10 +737,8 @@ public sealed class CustomerFacadeTests
                 return null;
             }
 
-            var response = new HttpResponseMessage(statusCode)
-            {
-                Content = new StringContent(problemBody, Encoding.UTF8, "application/problem+json"),
-            };
+            var response = Respond();
+            response.Content = new StringContent(problemBody, Encoding.UTF8, "application/problem+json");
 
             return ApiException.Create(
                 new HttpRequestMessage(HttpMethod.Get, "http://localhost/api/v1/customers"),

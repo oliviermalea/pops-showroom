@@ -24,7 +24,11 @@ public static class RefitRegistration
 
         services.Configure<BackendApiOptions>(configuration.GetSection(BackendApiOptions.SectionName));
 
-        services.AddRefitClient<ICustomerApi>(CreateRefitSettings())
+        // AddRefitGeneratedClient, not AddRefitClient: since Refit 15 the reflection-based request
+        // builder ships in a separate package, and the runtime throws NotSupportedException without it.
+        // The generated path is also the one that survives trimming and AOT — which matters the day a
+        // client is downloaded into the browser.
+        services.AddRefitGeneratedClient<ICustomerApi>(CreateRefitSettings())
             .ConfigureHttpClient(client => client.BaseAddress = new Uri(options.CustomerApiBaseUrl))
             .ConfigureCustomerApiResilience();
 
