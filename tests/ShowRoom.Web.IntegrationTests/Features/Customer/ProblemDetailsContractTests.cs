@@ -2,7 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using AwesomeAssertions;
-using ShowRoom.Web.Infrastructure.Api.Problems;
+using ShowRoom.Web.Shared.Api.Problems;
 using ShowRoom.Web.IntegrationTests.Infrastructure;
 using Xunit;
 

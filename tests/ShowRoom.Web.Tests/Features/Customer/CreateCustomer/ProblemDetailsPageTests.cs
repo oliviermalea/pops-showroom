@@ -4,7 +4,7 @@ using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using ShowRoom.Web.Features.Customer;
 using ShowRoom.Web.Features.Customer.CreateCustomer;
-using ShowRoom.Web.Infrastructure.Api.Problems;
+using ShowRoom.Web.Shared.Api.Problems;
 using ShowRoom.Web.Tests.Doubles;
 using Xunit;
 using CreatePage = ShowRoom.Web.Features.Customer.CreateCustomer.Page;

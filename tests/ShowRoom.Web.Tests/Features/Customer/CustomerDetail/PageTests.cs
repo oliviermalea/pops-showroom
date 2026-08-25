@@ -2,7 +2,7 @@ using AwesomeAssertions;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using ShowRoom.Web.Features.Customer;
-using ShowRoom.Web.Infrastructure.Api.Problems;
+using ShowRoom.Web.Shared.Api.Problems;
 using ShowRoom.Web.Tests.Doubles;
 using Xunit;
 using DetailPage = ShowRoom.Web.Features.Customer.CustomerDetail.Page;

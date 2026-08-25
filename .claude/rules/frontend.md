@@ -74,7 +74,30 @@ This is a minimum convention to frame scope and implementation effort per featur
 
 These rules are intentionally minimal (not exhaustive), but mandatory as a foundation baseline.
 
-### 2.5 Boundaries
+### 2.5 Shared front-end code lives in a dedicated project (mandatory)
+
+Anything shared or shareable between front-end deliverables goes into **`ShowRoom.Web.Shared`**, a Razor
+Class Library — the front-end counterpart of Aspire's `ServiceDefaults`. Duplicating a component, a
+design token or a transport contract between two front-end projects is a defect.
+
+- **It must stay WebAssembly-compatible.** Declare `<SupportedPlatform Include="browser" />` and depend
+  on the `Microsoft.AspNetCore.Components.Web` **package**, never on a `FrameworkReference` to
+  `Microsoft.AspNetCore.App`: the server framework does not exist in the browser, and referencing it
+  makes the whole library unusable from a WASM client. Server-only concerns (Serilog, hosting,
+  resilience pipelines, response compression) stay in the host.
+- **Structure it by concern, not as a dumping ground** — `Components/`, `Api/`, `PublicIds/`,
+  `Validation/`, `Styles/`. §2.6's warning about god-shared folders applies inside this project too: a
+  flat `Shared/` that hides coupling is exactly what it must not become.
+- **Admission criterion**: a type belongs here when a second front-end consumer needs it, or when it is
+  by nature cross-cutting (design tokens, error contracts, format guards). Move code in when the need
+  appears, not in anticipation — a move of Razor files is the manipulation that silently breaks
+  rendering (see "Shell placement, guarded").
+- **The global stylesheet does NOT need to move.** It is loaded by the HTML document the host serves, so
+  every render mode inherits it; only *scoped* CSS follows its component into the library, where the SDK
+  aggregates it into the host's `.styles.css` bundle. Moving `app.css` would buy nothing and cost a
+  `_content/` indirection.
+
+### 2.6 Boundaries
 - Do not import internal code across domains in an uncontrolled way.
 - Shared code goes to explicit shared packages/folders (`shared/ui`, `shared/utils`, etc.).
 - Avoid “god” shared folders that hide coupling.

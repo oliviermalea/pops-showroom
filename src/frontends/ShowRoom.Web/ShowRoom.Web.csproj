@@ -23,6 +23,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\..\aspire\ShowRoom.ServiceDefaults\ShowRoom.ServiceDefaults.csproj" />
+		<ProjectReference Include="..\ShowRoom.Web.Shared\ShowRoom.Web.Shared.csproj" />
 	</ItemGroup>
 
 </Project>

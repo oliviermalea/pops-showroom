@@ -6,7 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http;
 using ShowRoom.Web.Infrastructure.Api;
 using ShowRoom.Web.Infrastructure.Api.Refit.Customer;
-using ShowRoom.Web.Infrastructure.Api.Problems;
+using ShowRoom.Web.Shared.Api.Problems;
 using Xunit;
 
 namespace ShowRoom.Web.Tests.Infrastructure.Api;

@@ -9,7 +9,7 @@ using ShowRoom.Web.Features.Customer.CreateCustomer;
 using ShowRoom.Web.Infrastructure.Api;
 using ShowRoom.Web.Infrastructure.Api.Refit.Customer;
 using ShowRoom.Web.Infrastructure.Api.Refit.Customer.Models;
-using ShowRoom.Web.Infrastructure.Api.Refit.Models;
+using ShowRoom.Web.Shared.Api.Models;
 using Xunit;
 
 namespace ShowRoom.Web.Tests.Features.Customer;

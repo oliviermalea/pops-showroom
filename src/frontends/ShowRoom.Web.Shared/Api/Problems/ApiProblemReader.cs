@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Refit;
 
-namespace ShowRoom.Web.Infrastructure.Api.Problems;
+namespace ShowRoom.Web.Shared.Api.Problems;
 
 /// <summary>
 /// Reads an RFC 7807 ProblemDetails body out of a failed API response.

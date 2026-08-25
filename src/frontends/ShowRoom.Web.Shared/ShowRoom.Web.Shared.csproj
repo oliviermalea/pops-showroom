@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<!-- Declares the browser as a supported platform: the analyzer then flags any API that would
+		     compile here but throw once the assembly is downloaded and run in WebAssembly. -->
+		<SupportedPlatform Include="browser" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- Package reference, NOT a FrameworkReference to Microsoft.AspNetCore.App: the server
+		     framework does not exist in the browser, and referencing it would make this library
+		     unusable from the WebAssembly client. -->
+		<PackageReference Include="Microsoft.AspNetCore.Components.Web" />
+		<PackageReference Include="Refit" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<InternalsVisibleTo Include="ShowRoom.Web.Tests" />
+	</ItemGroup>
+
+</Project>
